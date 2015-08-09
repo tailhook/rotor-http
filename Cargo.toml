@@ -1,0 +1,27 @@
+[package]
+name = "rotor-http"
+description = """
+    The mio-based http server (+with http client and websockets in plans)
+"""
+license = "MIT"
+readme = "README.rst"
+keywords = ["mio", "http", "websocket", "rotor"]
+homepage = "http://github.com/tailhook/rotor-http"
+version = "0.1.0"
+authors = ["paul@colomiets.name"]
+
+[dependencies]
+hyper = "*"
+httparse = "*"
+netbuf = "*"
+log = "*"
+
+# temporary
+[dependencies.rotor]
+path = "../rotor"
+
+[lib]
+name = "rotor_http"
+
+[dev-dependencies]
+mio = { git = "git://github.com/carllerche/mio" }
