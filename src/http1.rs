@@ -4,14 +4,18 @@
 //! Otherwise implementation should be good enough for general consumption
 //!
 //!
+use std::io::Write;
 use std::error::Error;
+use std::mem::replace;
 
+use time::now_utc;
 use rotor::transports::greedy_stream::{Transport, Protocol};
 use rotor::buffer_util::find_substr;
 use hyper::version::HttpVersion;
 use hyper::method::Method;
-use hyper::header::Headers;
+use hyper::header::{Headers, Date, HttpDate, ContentLength};
 use hyper::uri::RequestUri;
+use hyper::status::StatusCode;
 use httparse;
 
 
@@ -25,25 +29,54 @@ pub const MAX_HEADERS_SIZE: usize = 16384;
 pub const MAX_BODY_SIZE: usize = 104_856_700;
 
 
-pub enum Client {
+pub trait Handler {
+    /// Dispatched when request arrives.
+    ///
+    /// We don't support POST body yet, so this is only one callback, but will
+    /// probably be split into many in future
+    fn request(request: Request, response: &mut ResponseBuilder) {
+        // The 404 or BadRequest for all requests
+    }
+}
+
+#[derive(Debug)]
+pub enum ResponseFsm {
+    Head {
+        status: StatusCode,
+        version: HttpVersion,
+        headers: Headers,
+    },
+    // TODO(tailhook) WritingFixed { bytes_remaining: u64 }
+    // TODO(tailhook) WritingChunked
+    End,
+}
+
+pub struct ResponseBuilder<'a, 'b: 'a>{
+    state: ResponseFsm,
+    transport: &'a mut Transport<'b>,
+}
+
+
+pub enum Client<H:Handler+Send> {
     Initial,
-    ReadHeaders,
-    ReadFixedSize(Request, usize),
-    ReadChunked(Request, usize),
+    ReadHeaders,  // TODO(tailhook) 100 Expect?
+    Processing(H),
+    // ReadFixedSize(Request, usize),  // TODO
+    // ReadChunked(Request, usize),
     KeepAlive,
 }
 
 #[derive(Debug)]
 pub struct Request {
-    version: HttpVersion,
-    method: Method,
-    uri: RequestUri,
-    headers: Headers,
-    body: Vec<u8>,
+    pub version: HttpVersion,
+    pub method: Method,
+    pub uri: RequestUri,
+    pub headers: Headers,
+    pub body: Vec<u8>,
 }
 
 fn parse_headers(transport: &mut Transport)
-    -> Result<Client, Box<Error+Send+Sync>>
+    -> Result<Option<Request>, Box<Error+Send+Sync>>
 {
     use self::Client::*;
     use hyper::version::HttpVersion::*;
@@ -51,32 +84,49 @@ fn parse_headers(transport: &mut Transport)
     let mut buf = transport.input();
     let headers_end = match find_substr(&buf[..], b"\r\n\r\n") {
         Some(x) => x,
-        None => { return Ok(ReadHeaders); }
+        None => { return Ok(None); }
     };
     let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS_NUM];
-    let mut raw = httparse::Request::new(&mut headers);
-    match raw.parse(&buf[..]) {
-        Ok(httparse::Status::Complete(x)) => {
-            assert!(x == headers_end+4);
+    let req = {
+        let mut raw = httparse::Request::new(&mut headers);
+        match raw.parse(&buf[..]) {
+            Ok(httparse::Status::Complete(x)) => {
+                assert!(x == headers_end+4);
+            }
+            Ok(_) => unreachable!(),
+            Err(_) => {
+                return Err(From::from("Header syntax mismatch"));
+            }
         }
-        Ok(_) => unreachable!(),
-        Err(_) => {
-            return Err(From::from("Header syntax mismatch"));
+        Request {
+            version: if raw.version.unwrap() == 1 { Http11 } else { Http10 },
+            method: try!(raw.method.unwrap().parse()),
+            uri: try!(raw.path.unwrap().parse()),
+            headers: try!(Headers::from_raw(raw.headers)),
+            body: Vec::new(),
         }
-    }
-    let req = Request {
-        version: if raw.version.unwrap() == 1 { Http11 } else { Http10 },
-        method: try!(raw.method.unwrap().parse()),
-        uri: try!(raw.path.unwrap().parse()),
-        headers: try!(Headers::from_raw(raw.headers)),
-        body: Vec::new(),
     };
-    // TODO(tailhook) check content-length, connection: close, transfer-encoding
-    println!("Request received {:?}", req);
-    Err(From::from("Not Implemented"))
+    buf.consume(headers_end+4);
+    Ok(Some(req))
 }
 
-impl Protocol for Client {
+impl<H: Handler+Send> Client<H> {
+    fn handle_request(&self, req: Request, transport: &mut Transport) {
+        let mut bld = ResponseBuilder {
+            state: ResponseFsm::Head {
+                status: if req.method == Method::Get
+                    { StatusCode::NotFound } else { StatusCode::BadRequest },
+                version: req.version,
+                headers: Headers::new(),
+            },
+            transport: transport,
+        };
+        <H as Handler>::request(req, &mut bld);
+        bld.default_body();
+    }
+}
+
+impl<H: Handler+Send> Protocol for Client<H> {
     fn accepted() -> Self {
         Client::Initial
     }
@@ -87,11 +137,71 @@ impl Protocol for Client {
             // ReadHeaders just for debugging and for potentially different
             // timeouts in future
             Initial|ReadHeaders|KeepAlive => {
-                parse_headers(transport)
-                .map_err(|e| debug!("Error parsing HTTP headers: {}", e))
-                .ok()
+                match parse_headers(transport) {
+                    Err(e) => {
+                        debug!("Error parsing HTTP headers: {}", e);
+                        None
+                    }
+                    Ok(None) => {
+                        Some(ReadHeaders)
+                    }
+                    Ok(Some(req)) => {
+                        self.handle_request(req, transport);
+                        Some(KeepAlive)
+                    }
+                }
             }
-            _ => unimplemented!(),
+            Processing(h) => {
+                unimplemented!();
+            }
+        }
+    }
+}
+
+impl<'a, 'b> ResponseBuilder<'a, 'b> {
+
+    /// Write request body in a single go
+    pub fn put_body<B:AsRef<[u8]>>(&mut self, body: B) {
+        use self::ResponseFsm::*;
+        match replace(&mut self.state, End) {
+            Head { status, version, mut headers } => {
+                let body = body.as_ref();
+                let out = self.transport.output();
+                write!(out, "{} {}\r\n", version, status).unwrap();
+                if !headers.has::<Date>() {
+                    headers.set(Date(HttpDate(now_utc())));
+                }
+                headers.set(ContentLength(body.len() as u64));
+                write!(out, "{}\r\n", headers).unwrap();
+                out.extend(body);
+            }
+            state => {
+                panic!("Too late to send body in state: {:?}", state);
+            }
+        }
+    }
+
+    pub fn set_status(&mut self, new_status: StatusCode) {
+        use self::ResponseFsm::*;
+        match self.state {
+            Head { ref mut status, .. } => {
+                *status = new_status;
+            }
+            ref state => {
+                panic!("Too late to set status in state: {:?}", state);
+            }
+        }
+    }
+
+    pub fn default_body(&mut self) {
+        use self::ResponseFsm::*;
+        match self.state {
+            Head { status, .. } => {
+                // TODO(tailhook) maybe assert on 200 Ok status?
+                self.put_body(&format!("{}", status));
+                self.state = End;
+            }
+            End => {}
         }
     }
 }

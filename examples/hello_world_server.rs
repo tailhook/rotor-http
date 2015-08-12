@@ -1,3 +1,4 @@
+extern crate hyper;
 extern crate rotor_http;
 extern crate rotor;
 extern crate mio;
@@ -6,11 +7,32 @@ type StateMachine = rotor::transports::accept::Serve<
                         mio::tcp::TcpListener,
                         rotor::transports::greedy_stream::Stream<
                             mio::tcp::TcpStream,
-                            rotor_http::http1::Client>>;
+                            rotor_http::http1::Client<HelloWorld>>>;
 
 struct Context {
     channel: mio::Sender<rotor::handler::Notify<StateMachine>>,
 }
+
+struct HelloWorld;
+
+impl rotor_http::http1::Handler for HelloWorld {
+    fn request(req: rotor_http::http1::Request,
+               res: &mut rotor_http::http1::ResponseBuilder)
+    {
+        match req.uri {
+            hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/" => {
+                res.set_status(hyper::status::StatusCode::Ok);
+                res.put_body("Hello World!");
+            }
+            hyper::uri::RequestUri::AbsolutePath(p) => {
+                res.set_status(hyper::status::StatusCode::Ok);
+                res.put_body(format!("Hello {}!", &p[1..]));
+            }
+            _ => {}  // Do nothing: not found or bad request
+        }
+    }
+}
+
 
 impl rotor::context::AsyncContext<StateMachine> for Context {
     fn async_channel<'x>(&'x self)

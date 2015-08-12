@@ -15,6 +15,7 @@ hyper = "*"
 httparse = "*"
 netbuf = "*"
 log = "*"
+time = "*"
 
 # temporary
 [dependencies.rotor]
