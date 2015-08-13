@@ -19,7 +19,7 @@ time = "*"
 
 # temporary
 [dependencies.rotor]
-path = "../rotor"
+git = "git://github.com/tailhook/rotor"
 
 [lib]
 name = "rotor_http"
