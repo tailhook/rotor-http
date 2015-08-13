@@ -7,5 +7,5 @@ Rotor HTTP
 
 The HTTP implementation based on mio_ and rotor_.
 
-.. _mio:: https://crates.io/crates/mio
-.. _rotor:: https://github.com/tailhook/rotor
+.. _mio: https://crates.io/crates/mio
+.. _rotor: https://github.com/tailhook/rotor
