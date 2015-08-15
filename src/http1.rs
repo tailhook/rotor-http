@@ -34,7 +34,7 @@ pub trait Handler {
     ///
     /// We don't support POST body yet, so this is only one callback, but will
     /// probably be split into many in future
-    fn request(request: Request, response: &mut ResponseBuilder) {
+    fn request(_request: Request, _response: &mut ResponseBuilder) {
         // The 404 or BadRequest for all requests
     }
 }
@@ -78,7 +78,6 @@ pub struct Request {
 fn parse_headers(transport: &mut Transport)
     -> Result<Option<Request>, Box<Error+Send+Sync>>
 {
-    use self::Client::*;
     use hyper::version::HttpVersion::*;
 
     let mut buf = transport.input();
@@ -151,7 +150,7 @@ impl<H: Handler+Send> Protocol for Client<H> {
                     }
                 }
             }
-            Processing(h) => {
+            Processing(_) => {
                 unimplemented!();
             }
         }
