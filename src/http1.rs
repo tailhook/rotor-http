@@ -6,6 +6,7 @@
 //!
 use std::io::Write;
 use std::error::Error;
+use std::marker::PhantomData;
 use std::mem::replace;
 
 use time::now_utc;
@@ -29,12 +30,14 @@ pub const MAX_HEADERS_SIZE: usize = 16384;
 pub const MAX_BODY_SIZE: usize = 104_856_700;
 
 
-pub trait Handler {
+pub trait Handler<C> {
     /// Dispatched when request arrives.
     ///
     /// We don't support POST body yet, so this is only one callback, but will
     /// probably be split into many in future
-    fn request(_request: Request, _response: &mut ResponseBuilder) {
+    fn request(_request: Request, _response: &mut ResponseBuilder,
+               _ctx: &mut C)
+    {
         // The 404 or BadRequest for all requests
     }
 }
@@ -57,14 +60,16 @@ pub struct ResponseBuilder<'a, 'b: 'a>{
 }
 
 
-pub enum Client<H:Handler+Send> {
+pub enum Client<C, H:Handler<C>> {
     Initial,
     ReadHeaders,  // TODO(tailhook) 100 Expect?
-    Processing(H),
+    Processing(H, PhantomData<*const C>),
     // ReadFixedSize(Request, usize),  // TODO
     // ReadChunked(Request, usize),
     KeepAlive,
 }
+
+unsafe impl<C, H:Handler<C>+Send> Send for Client<C, H> {}
 
 #[derive(Debug)]
 pub struct Request {
@@ -109,8 +114,10 @@ fn parse_headers(transport: &mut Transport)
     Ok(Some(req))
 }
 
-impl<H: Handler+Send> Client<H> {
-    fn handle_request(&self, req: Request, transport: &mut Transport) {
+impl<C, H: Handler<C>+Send> Client<C, H> {
+    fn handle_request(&self, req: Request, transport: &mut Transport,
+                        ctx: &mut C)
+    {
         let mut bld = ResponseBuilder {
             state: ResponseFsm::Head {
                 status: if req.method == Method::Get
@@ -120,16 +127,18 @@ impl<H: Handler+Send> Client<H> {
             },
             transport: transport,
         };
-        <H as Handler>::request(req, &mut bld);
+        <H as Handler<C>>::request(req, &mut bld, ctx);
         bld.default_body();
     }
 }
 
-impl<H: Handler+Send> Protocol for Client<H> {
-    fn accepted() -> Self {
+impl<C, H: Handler<C>+Send> Protocol<C> for Client<C, H> {
+    fn accepted(_ctx: &mut C) -> Self {
         Client::Initial
     }
-    fn data_received(self, transport: &mut Transport) -> Option<Self> {
+    fn data_received(self, transport: &mut Transport, ctx: &mut C)
+        -> Option<Self>
+    {
         use self::Client::*;
         match self {
             // We keep Initial and KeepAlive states separate from
@@ -145,12 +154,12 @@ impl<H: Handler+Send> Protocol for Client<H> {
                         Some(ReadHeaders)
                     }
                     Ok(Some(req)) => {
-                        self.handle_request(req, transport);
+                        self.handle_request(req, transport, ctx);
                         Some(KeepAlive)
                     }
                 }
             }
-            Processing(_) => {
+            Processing(_, _) => {
                 unimplemented!();
             }
         }
