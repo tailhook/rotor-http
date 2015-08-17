@@ -16,13 +16,8 @@ httparse = "*"
 netbuf = "*"
 log = "*"
 time = "*"
-
-# temporary
-[dependencies.rotor]
-git = "git://github.com/tailhook/rotor"
+mio = "*"
+rotor = "0.1"
 
 [lib]
 name = "rotor_http"
-
-[dev-dependencies]
-mio = { git = "git://github.com/carllerche/mio" }
