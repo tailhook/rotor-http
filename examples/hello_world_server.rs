@@ -56,11 +56,11 @@ impl<C:Counter> rotor_http::http1::Handler<C> for HelloWorld {
 }
 
 
-impl rotor::context::AsyncContext<StateMachine> for Context {
-    fn async_channel<'x>(&'x self)
-        -> &'x mio::Sender<rotor::handler::Notify<StateMachine>>
+impl rotor::context::AsyncAddMachine<StateMachine> for Context {
+    fn async_add_machine(&mut self, m: StateMachine)
+        -> Result<(), StateMachine>
     {
-        &self.channel
+        rotor::send_machine(&mut self.channel, m)
     }
 }
 
