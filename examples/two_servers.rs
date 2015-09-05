@@ -153,9 +153,9 @@ impl<A:Send, B:Send, C> rotor::EventMachine<C> for Wrapper<A, B>
           B: rotor::EventMachine<C>,
 {
     type Timeout = Wrapper<A::Timeout, B::Timeout>;
-    fn ready<'x, S>(self, events: mio::EventSet, context: &mut C, scope: &mut S)
+    fn ready<S>(self, events: mio::EventSet, context: &mut C, scope: &mut S)
         -> Option<Self>
-        where S: 'x, S: rotor::Scope<Self, Self::Timeout>
+        where S: rotor::Scope<Self, Self::Timeout>
     {
         match self {
             Wrapper::Incr(i) => i.ready(events, context,
@@ -166,9 +166,9 @@ impl<A:Send, B:Send, C> rotor::EventMachine<C> for Wrapper<A, B>
                 .map(Wrapper::Get),
         }
     }
-    fn register<'x, S>(&mut self, scope: &mut S)
+    fn register<S>(&mut self, scope: &mut S)
         -> Result<(), io::Error>
-        where S: 'x, S: rotor::Scope<Self, Self::Timeout>
+        where S: rotor::Scope<Self, Self::Timeout>
     {
         match self {
             &mut Wrapper::Incr(ref mut i)
@@ -177,9 +177,9 @@ impl<A:Send, B:Send, C> rotor::EventMachine<C> for Wrapper<A, B>
             => i.register(&mut ScopeGet(scope, PhantomData)),
         }
     }
-    fn abort<'x, S>(self, reason: rotor::handler::Abort,
+    fn abort<S>(self, reason: rotor::handler::Abort,
         context: &mut C, scope: &mut S)
-        where S: 'x, S: rotor::Scope<Self, Self::Timeout>
+        where S: rotor::Scope<Self, Self::Timeout>
     {
         match self {
             Wrapper::Incr(i)
@@ -197,12 +197,12 @@ fn main() {
         counter: 0,
     }, &mut event_loop);
     event_loop.channel().send(rotor::handler::Notify::NewMachine(
-        Wrapper::Incr(rotor::transports::accept::Serve::new(
+        Wrapper::Incr(FSMIncr::new(
             mio::tcp::TcpListener::bind(
                 &"127.0.0.1:8888".parse().unwrap()).unwrap(),
             )))).unwrap();
     event_loop.channel().send(rotor::handler::Notify::NewMachine(
-        Wrapper::Get(rotor::transports::accept::Serve::new(
+        Wrapper::Get(FSMGet::new(
             mio::tcp::TcpListener::bind(
                 &"127.0.0.1:8889".parse().unwrap()).unwrap(),
             )))).unwrap();
