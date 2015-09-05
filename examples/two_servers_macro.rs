@@ -4,14 +4,14 @@ extern crate rotor_http;
 extern crate mio;
 
 
-type FSMIncr = rotor::transports::accept::Serve<
+pub type FSMIncr = rotor::transports::accept::Serve<
                 mio::tcp::TcpListener,
                 rotor::transports::greedy_stream::Stream<
                     mio::tcp::TcpStream,
                     rotor_http::http1::Client<Context, Incr>,
                     Context>,
                 Context>;
-type FSMGet = rotor::transports::accept::Serve<
+pub type FSMGet = rotor::transports::accept::Serve<
                 mio::tcp::TcpListener,
                 rotor::transports::greedy_stream::Stream<
                     mio::tcp::TcpStream,
@@ -19,8 +19,7 @@ type FSMGet = rotor::transports::accept::Serve<
                     Context>,
                 Context>;
 
-struct Context {
-    channel: mio::Sender<rotor::handler::Notify<Wrapper>>,
+pub struct Context {
     counter: usize,
 }
 
@@ -78,12 +77,6 @@ impl<C:GetCounter> rotor_http::http1::Handler<C> for Get {
     }
 }
 
-impl rotor::context::AsyncAddMachine<Wrapper> for Context {
-    fn async_add_machine(&mut self, m: Wrapper) -> Result<(), Wrapper> {
-        rotor::send_machine(&mut self.channel, m)
-    }
-}
-
 rotor_compose_state_machines!(Wrapper<Context> {
     Incr(FSMIncr),
     Get(FSMGet),
@@ -93,9 +86,8 @@ rotor_compose_state_machines!(Wrapper<Context> {
 fn main() {
     let mut event_loop = mio::EventLoop::new().unwrap();
     let mut handler = rotor::Handler::new(Context {
-        channel: event_loop.channel(),
         counter: 0,
-    });
+    }, &mut event_loop);
     event_loop.channel().send(rotor::handler::Notify::NewMachine(
         Wrapper::Incr(rotor::transports::accept::Serve::new(
             mio::tcp::TcpListener::bind(

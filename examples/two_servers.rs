@@ -1,3 +1,6 @@
+use std::io;
+use std::marker::PhantomData;
+
 extern crate hyper;
 extern crate rotor_http;
 extern crate rotor;
@@ -21,7 +24,6 @@ type FSMGet = rotor::transports::accept::Serve<
 type StateMachine = Wrapper<FSMIncr, FSMGet>;
 
 struct Context {
-    channel: mio::Sender<rotor::handler::Notify<StateMachine>>,
     counter: usize,
 }
 
@@ -49,6 +51,8 @@ enum Wrapper<A, B> {
     Incr(A),
     Get(B),
 }
+struct ScopeIncr<'a, S: 'a, A, B, C>(&'a mut S, PhantomData<*const (A, B, C)>);
+struct ScopeGet<'a, S: 'a, A, B, C>(&'a mut S, PhantomData<*const (A, B, C)>);
 
 impl<C:IncrCounter> rotor_http::http1::Handler<C> for Incr {
     fn request(req: rotor_http::http1::Request,
@@ -83,29 +87,64 @@ impl<C:GetCounter> rotor_http::http1::Handler<C> for Get {
     }
 }
 
-impl rotor::context::AsyncAddMachine<StateMachine> for Context {
-    fn async_add_machine(&mut self, m: StateMachine) -> Result<(), StateMachine> {
-        rotor::send_machine(&mut self.channel, m)
+
+impl<'a, S, A, B, C> rotor::Scope<A, A::Timeout> for ScopeIncr<'a, S, A, B, C>
+    where S: rotor::Scope<Wrapper<A, B>, Wrapper<A::Timeout, B::Timeout>> + 'a,
+          A: rotor::EventMachine<C>,
+          B: rotor::EventMachine<C>,
+{
+    fn async_add_machine(&mut self, m: A) -> Result<(), A> {
+        self.0.async_add_machine(Wrapper::Incr(m))
+        .map_err(|x| if let Wrapper::Incr(c) = x {
+            c
+        } else {
+            unreachable!();
+        })
+    }
+    fn add_timeout_ms(&mut self, delay: u64, t: A::Timeout)
+        -> Result<mio::Timeout, mio::TimerError>
+    {
+        self.0.add_timeout_ms(delay, Wrapper::Incr(t))
+    }
+    fn clear_timeout(&mut self, timeout: mio::Timeout) -> bool {
+        self.0.clear_timeout(timeout)
+    }
+    fn register<E: ?Sized>(&mut self, io: &E,
+        interest: mio::EventSet, opt: mio::PollOpt)
+        -> Result<(), io::Error>
+        where E: mio::Evented
+    {
+        self.0.register(io, interest, opt)
     }
 }
 
-impl rotor::context::AsyncAddMachine<FSMIncr> for Context {
-    fn async_add_machine(&mut self, m: FSMIncr) -> Result<(), FSMIncr> {
-        if let Err(Wrapper::Incr(m)) = self.async_add_machine(Wrapper::Incr(m)) {
-            Err(m)
+impl<'a, S, A, B, C> rotor::Scope<B, B::Timeout> for ScopeGet<'a, S, A, B, C>
+    where S: rotor::Scope<Wrapper<A, B>, Wrapper<A::Timeout, B::Timeout>> + 'a,
+          A: rotor::EventMachine<C>,
+          B: rotor::EventMachine<C>,
+{
+    fn async_add_machine(&mut self, m: B) -> Result<(), B> {
+        self.0.async_add_machine(Wrapper::Get(m))
+        .map_err(|x| if let Wrapper::Get(c) = x {
+            c
         } else {
-            Ok(())
-        }
+            unreachable!();
+        })
     }
-}
-
-impl rotor::context::AsyncAddMachine<FSMGet> for Context {
-    fn async_add_machine(&mut self, m: FSMGet) -> Result<(), FSMGet> {
-        if let Err(Wrapper::Get(m)) = self.async_add_machine(Wrapper::Get(m)) {
-            Err(m)
-        } else {
-            Ok(())
-        }
+    fn add_timeout_ms(&mut self, delay: u64, t: B::Timeout)
+        -> Result<mio::Timeout, mio::TimerError>
+    {
+        self.0.add_timeout_ms(delay, Wrapper::Get(t))
+    }
+    fn clear_timeout(&mut self, timeout: mio::Timeout) -> bool {
+        self.0.clear_timeout(timeout)
+    }
+    fn register<E: ?Sized>(&mut self, io: &E,
+        interest: mio::EventSet, opt: mio::PollOpt)
+        -> Result<(), io::Error>
+        where E: mio::Evented
+    {
+        self.0.register(io, interest, opt)
     }
 }
 
@@ -113,19 +152,40 @@ impl<A:Send, B:Send, C> rotor::EventMachine<C> for Wrapper<A, B>
     where A: rotor::EventMachine<C>,
           B: rotor::EventMachine<C>,
 {
-    fn ready(self, events: mio::EventSet, context: &mut C) -> Option<Self> {
-        match self {
-            Wrapper::Incr(i) => i.ready(events, context).map(Wrapper::Incr),
-            Wrapper::Get(i) => i.ready(events, context).map(Wrapper::Get),
-        }
-    }
-    fn register<H: mio::Handler>(&mut self,
-        tok: mio::Token, eloop: &mut mio::EventLoop<H>)
-        -> Result<(), std::io::Error>
+    type Timeout = Wrapper<A::Timeout, B::Timeout>;
+    fn ready<'x, S>(self, events: mio::EventSet, context: &mut C, scope: &mut S)
+        -> Option<Self>
+        where S: 'x, S: rotor::Scope<Self, Self::Timeout>
     {
         match self {
-            &mut Wrapper::Incr(ref mut i) => i.register(tok, eloop),
-            &mut Wrapper::Get(ref mut i) => i.register(tok, eloop),
+            Wrapper::Incr(i) => i.ready(events, context,
+                &mut ScopeIncr(scope, PhantomData))
+                .map(Wrapper::Incr),
+            Wrapper::Get(i) => i.ready(events, context,
+                &mut ScopeGet(scope, PhantomData))
+                .map(Wrapper::Get),
+        }
+    }
+    fn register<'x, S>(&mut self, scope: &mut S)
+        -> Result<(), io::Error>
+        where S: 'x, S: rotor::Scope<Self, Self::Timeout>
+    {
+        match self {
+            &mut Wrapper::Incr(ref mut i)
+            => i.register(&mut ScopeIncr(scope, PhantomData)),
+            &mut Wrapper::Get(ref mut i)
+            => i.register(&mut ScopeGet(scope, PhantomData)),
+        }
+    }
+    fn abort<'x, S>(self, reason: rotor::handler::Abort,
+        context: &mut C, scope: &mut S)
+        where S: 'x, S: rotor::Scope<Self, Self::Timeout>
+    {
+        match self {
+            Wrapper::Incr(i)
+            => i.abort(reason, context, &mut ScopeIncr(scope, PhantomData)),
+            Wrapper::Get(i)
+            => i.abort(reason, context, &mut ScopeGet(scope, PhantomData)),
         }
     }
 }
@@ -134,9 +194,8 @@ impl<A:Send, B:Send, C> rotor::EventMachine<C> for Wrapper<A, B>
 fn main() {
     let mut event_loop = mio::EventLoop::new().unwrap();
     let mut handler = rotor::Handler::new(Context {
-        channel: event_loop.channel(),
         counter: 0,
-    });
+    }, &mut event_loop);
     event_loop.channel().send(rotor::handler::Notify::NewMachine(
         Wrapper::Incr(rotor::transports::accept::Serve::new(
             mio::tcp::TcpListener::bind(

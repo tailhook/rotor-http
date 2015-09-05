@@ -4,16 +4,16 @@ extern crate rotor;
 extern crate mio;
 
 
-type StateMachine = rotor::transports::accept::Serve<
+type StateMachine<'a> = rotor::transports::accept::Serve<
                         mio::tcp::TcpListener,
                         rotor::transports::greedy_stream::Stream<
                             mio::tcp::TcpStream,
                             rotor_http::http1::Client<Context, HelloWorld>,
                             Context>,
                         Context>;
+type Timeo = ();
 
 struct Context {
-    channel: mio::Sender<rotor::handler::Notify<StateMachine>>,
     counter: usize,
 }
 
@@ -55,24 +55,13 @@ impl<C:Counter> rotor_http::http1::Handler<C> for HelloWorld {
     }
 }
 
-
-impl rotor::context::AsyncAddMachine<StateMachine> for Context {
-    fn async_add_machine(&mut self, m: StateMachine)
-        -> Result<(), StateMachine>
-    {
-        rotor::send_machine(&mut self.channel, m)
-    }
-}
-
-
 fn main() {
     let mut event_loop = mio::EventLoop::new().unwrap();
     let mut handler = rotor::Handler::new(Context {
-        channel: event_loop.channel(),
         counter: 0,
-    });
+    }, &mut event_loop);
     event_loop.channel().send(rotor::handler::Notify::NewMachine(
-        rotor::transports::accept::Serve::new(
+        StateMachine::new(
             mio::tcp::TcpListener::bind(
                 &"127.0.0.1:8888".parse().unwrap()).unwrap(),
             ))).unwrap();
