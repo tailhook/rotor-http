@@ -88,8 +88,8 @@ impl<C:GetCounter> rotor_http::http1::Handler<C> for Get {
 }
 
 
-impl<'a, S, A, B, C> rotor::Scope<A, A::Timeout> for ScopeIncr<'a, S, A, B, C>
-    where S: rotor::Scope<Wrapper<A, B>, Wrapper<A::Timeout, B::Timeout>> + 'a,
+impl<'a, S, A, B, C> rotor::Scope<A> for ScopeIncr<'a, S, A, B, C>
+    where S: rotor::Scope<Wrapper<A, B>> + 'a,
           A: rotor::EventMachine<C>,
           B: rotor::EventMachine<C>,
 {
@@ -118,8 +118,8 @@ impl<'a, S, A, B, C> rotor::Scope<A, A::Timeout> for ScopeIncr<'a, S, A, B, C>
     }
 }
 
-impl<'a, S, A, B, C> rotor::Scope<B, B::Timeout> for ScopeGet<'a, S, A, B, C>
-    where S: rotor::Scope<Wrapper<A, B>, Wrapper<A::Timeout, B::Timeout>> + 'a,
+impl<'a, S, A, B, C> rotor::Scope<B> for ScopeGet<'a, S, A, B, C>
+    where S: rotor::Scope<Wrapper<A, B>> + 'a,
           A: rotor::EventMachine<C>,
           B: rotor::EventMachine<C>,
 {
@@ -147,15 +147,20 @@ impl<'a, S, A, B, C> rotor::Scope<B, B::Timeout> for ScopeGet<'a, S, A, B, C>
         self.0.register(io, interest, opt)
     }
 }
+impl<A:Send, B:Send> rotor::BaseMachine for Wrapper<A, B>
+    where A: rotor::BaseMachine,
+          B: rotor::BaseMachine,
+{
+    type Timeout = Wrapper<A::Timeout, B::Timeout>;
+}
 
 impl<A:Send, B:Send, C> rotor::EventMachine<C> for Wrapper<A, B>
     where A: rotor::EventMachine<C>,
           B: rotor::EventMachine<C>,
 {
-    type Timeout = Wrapper<A::Timeout, B::Timeout>;
     fn ready<S>(self, events: mio::EventSet, context: &mut C, scope: &mut S)
         -> Option<Self>
-        where S: rotor::Scope<Self, Self::Timeout>
+        where S: rotor::Scope<Self>
     {
         match self {
             Wrapper::Incr(i) => i.ready(events, context,
@@ -168,7 +173,7 @@ impl<A:Send, B:Send, C> rotor::EventMachine<C> for Wrapper<A, B>
     }
     fn register<S>(&mut self, scope: &mut S)
         -> Result<(), io::Error>
-        where S: rotor::Scope<Self, Self::Timeout>
+        where S: rotor::Scope<Self>
     {
         match self {
             &mut Wrapper::Incr(ref mut i)
@@ -179,7 +184,7 @@ impl<A:Send, B:Send, C> rotor::EventMachine<C> for Wrapper<A, B>
     }
     fn abort<S>(self, reason: rotor::handler::Abort,
         context: &mut C, scope: &mut S)
-        where S: rotor::Scope<Self, Self::Timeout>
+        where S: rotor::Scope<Self>
     {
         match self {
             Wrapper::Incr(i)

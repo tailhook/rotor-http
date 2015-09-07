@@ -10,6 +10,7 @@ use std::marker::PhantomData;
 use std::mem::replace;
 
 use time::now_utc;
+use rotor::BaseMachine;
 use rotor::transports::greedy_stream::{Transport, Protocol};
 use rotor::buffer_util::find_substr;
 use hyper::version::HttpVersion;
@@ -130,6 +131,10 @@ impl<C, H: Handler<C>+Send> Client<C, H> {
         <H as Handler<C>>::request(req, &mut bld, ctx);
         bld.default_body();
     }
+}
+
+impl<C, H: Handler<C>+Send> BaseMachine for Client<C, H> {
+    type Timeout = ();
 }
 
 impl<C, H: Handler<C>+Send> Protocol<C> for Client<C, H> {
