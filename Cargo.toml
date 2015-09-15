@@ -19,5 +19,8 @@ time = "*"
 mio = "*"
 rotor = "0.2"
 
+[dev-dependencies]
+libc = "*"
+
 [lib]
 name = "rotor_http"
