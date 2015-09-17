@@ -7,16 +7,16 @@ license = "MIT"
 readme = "README.rst"
 keywords = ["mio", "http", "websocket", "rotor"]
 homepage = "http://github.com/tailhook/rotor-http"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["paul@colomiets.name"]
 
 [dependencies]
-hyper = "*"
-httparse = "*"
-netbuf = "*"
+hyper = "0.6.13"
+httparse = "^0.1"
+netbuf = "0.2.0"
 log = "*"
 time = "*"
-mio = "*"
+mio = "0.4.3"
 rotor = "0.2"
 
 [dev-dependencies]
