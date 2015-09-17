@@ -137,8 +137,8 @@ impl<C, H: Handler<C>+Send> BaseMachine for Client<C, H> {
     type Timeout = ();
 }
 
-impl<C, H: Handler<C>+Send> Protocol<C> for Client<C, H> {
-    fn accepted(_ctx: &mut C) -> Self {
+impl<S, C, H: Handler<C>+Send> Protocol<S, C> for Client<C, H> {
+    fn accepted(_conn: &mut S, _ctx: &mut C) -> Self {
         Client::Initial
     }
     fn data_received(self, transport: &mut Transport, ctx: &mut C)
