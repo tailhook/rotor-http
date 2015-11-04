@@ -6,7 +6,7 @@ extern crate mio;
 
 type StateMachine<'a> = rotor::transports::accept::Serve<
                         mio::tcp::TcpListener,
-                        rotor::transports::greedy_stream::Stream<
+                        rotor::transports::stream::Stream<
                             mio::tcp::TcpStream,
                             rotor_http::http1::Client<Context, HelloWorld>,
                             Context>,
@@ -60,10 +60,10 @@ fn main() {
     let mut handler = rotor::Handler::new(Context {
         counter: 0,
     }, &mut event_loop);
-    event_loop.channel().send(rotor::handler::Notify::NewMachine(
+    handler.add_root(&mut event_loop,
         StateMachine::new(
             mio::tcp::TcpListener::bind(
                 &"127.0.0.1:8888".parse().unwrap()).unwrap(),
-            ))).unwrap();
+            ));
     event_loop.run(&mut handler).unwrap();
 }

@@ -10,9 +10,10 @@ use std::marker::PhantomData;
 use std::mem::replace;
 
 use time::now_utc;
-use rotor::BaseMachine;
-use rotor::transports::greedy_stream::{Transport, Protocol};
+use rotor::transports::stream::{Transport, Protocol};
+use rotor::transports::StreamSocket;
 use rotor::buffer_util::find_substr;
+use rotor::async::Async;
 use hyper::version::HttpVersion;
 use hyper::method::Method;
 use hyper::header::{Headers, Date, HttpDate, ContentLength};
@@ -70,8 +71,6 @@ pub enum Client<C, H:Handler<C>> {
     KeepAlive,
 }
 
-unsafe impl<C, H:Handler<C>+Send> Send for Client<C, H> {}
-
 #[derive(Debug)]
 pub struct Request {
     pub version: HttpVersion,
@@ -115,7 +114,7 @@ fn parse_headers(transport: &mut Transport)
     Ok(Some(req))
 }
 
-impl<C, H: Handler<C>+Send> Client<C, H> {
+impl<C, H: Handler<C>> Client<C, H> {
     fn handle_request(&self, req: Request, transport: &mut Transport,
                         ctx: &mut C)
     {
@@ -133,16 +132,14 @@ impl<C, H: Handler<C>+Send> Client<C, H> {
     }
 }
 
-impl<C, H: Handler<C>+Send> BaseMachine for Client<C, H> {
-    type Timeout = ();
-}
-
-impl<S, C, H: Handler<C>+Send> Protocol<S, C> for Client<C, H> {
-    fn accepted(_conn: &mut S, _ctx: &mut C) -> Self {
-        Client::Initial
+impl<C, H: Handler<C>> Protocol<C> for Client<C, H> {
+    fn accepted<S: StreamSocket>(_conn: &mut S, _context: &mut C)
+        -> Option<Self>
+    {
+        Some(Client::Initial)
     }
     fn data_received(self, transport: &mut Transport, ctx: &mut C)
-        -> Option<Self>
+        -> Async<Self, ()>
     {
         use self::Client::*;
         match self {
@@ -153,14 +150,14 @@ impl<S, C, H: Handler<C>+Send> Protocol<S, C> for Client<C, H> {
                 match parse_headers(transport) {
                     Err(e) => {
                         debug!("Error parsing HTTP headers: {}", e);
-                        None
+                        Async::Stop
                     }
                     Ok(None) => {
-                        Some(ReadHeaders)
+                        Async::Continue(ReadHeaders, ())
                     }
                     Ok(Some(req)) => {
                         self.handle_request(req, transport, ctx);
-                        Some(KeepAlive)
+                        Async::Continue(KeepAlive, ())
                     }
                 }
             }

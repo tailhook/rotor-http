@@ -14,10 +14,10 @@ authors = ["paul@colomiets.name"]
 hyper = "0.6.13"
 httparse = "1.0.0"
 netbuf = "0.2.0"
-log = "*"
-time = "*"
+log = "0.3.2"
+time = "0.1.23"
 mio = "0.4.3"
-rotor = { git = "https://github.com/tailhook/rotor.git" }
+rotor = "0.3.0"
 
 [dev-dependencies]
 libc = "*"
