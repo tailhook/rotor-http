@@ -5,15 +5,9 @@ extern crate mio;
 
 use std::env;
 use std::thread;
+use rotor_http::HttpServer;
+use mio::tcp::TcpListener;
 
-type StateMachine<'a> = rotor::transports::accept::Serve<
-                        mio::tcp::TcpListener,
-                        rotor::transports::greedy_stream::Stream<
-                            mio::tcp::TcpStream,
-                            rotor_http::http1::Client<Context, HelloWorld>,
-                            Context>,
-                        Context>;
-type Timeo = ();
 
 struct Context {
     counter: usize,
@@ -58,8 +52,10 @@ impl<C:Counter> rotor_http::http1::Handler<C> for HelloWorld {
 }
 
 fn main() {
-    let lst = mio::tcp::TcpListener::bind(
-                &"127.0.0.1:8888".parse().unwrap()).unwrap();
+
+
+    let lst = TcpListener::bind(
+                &"127.0.0.1:7777".parse().unwrap()).unwrap();
     let threads = env::var("THREADS").unwrap_or("2".to_string())
         .parse().unwrap();
     let mut children = Vec::new();
@@ -70,8 +66,8 @@ fn main() {
             let mut handler = rotor::Handler::new(Context {
                 counter: 0,
             }, &mut event_loop);
-            event_loop.channel().send(rotor::handler::Notify::NewMachine(
-                StateMachine::new(listener))).unwrap();
+            handler.add_root(&mut event_loop,
+                HttpServer::<_, HelloWorld>::new(listener));
             event_loop.run(&mut handler).unwrap();
         }));
     }
