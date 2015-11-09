@@ -4,14 +4,9 @@ extern crate rotor;
 extern crate mio;
 
 
-type StateMachine<'a> = rotor::transports::accept::Serve<
-                        mio::tcp::TcpListener,
-                        rotor::transports::stream::Stream<
-                            mio::tcp::TcpStream,
-                            rotor_http::http1::Client<Context, HelloWorld>,
-                            Context>,
-                        Context>;
-type Timeo = ();
+use rotor_http::HttpServer;
+use mio::tcp::TcpListener;
+
 
 struct Context {
     counter: usize,
@@ -61,8 +56,8 @@ fn main() {
         counter: 0,
     }, &mut event_loop);
     handler.add_root(&mut event_loop,
-        StateMachine::new(
-            mio::tcp::TcpListener::bind(
+        HttpServer::<_, HelloWorld>::new(
+            TcpListener::bind(
                 &"127.0.0.1:8888".parse().unwrap()).unwrap(),
             ));
     event_loop.run(&mut handler).unwrap();

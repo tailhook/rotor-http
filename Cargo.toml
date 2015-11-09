@@ -17,7 +17,8 @@ netbuf = "0.2.0"
 log = "0.3.2"
 time = "0.1.23"
 mio = "0.4.3"
-rotor = "0.3.0"
+# rotor = "0.4.0"
+rotor = { git = "git://github.com/tailhook/rotor", rev = "b6db831" }
 
 [dev-dependencies]
 libc = "*"
