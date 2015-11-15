@@ -4,6 +4,7 @@
 //! Otherwise implementation should be good enough for general consumption
 //!
 //!
+use std::cmp;
 use std::io::Write;
 use std::error::Error;
 use std::marker::PhantomData;
@@ -61,13 +62,42 @@ pub struct ResponseBuilder<'a, 'b: 'a>{
     transport: &'a mut Transport<'b>,
 }
 
+impl <'a, 'b>ResponseBuilder<'a, 'b> {
+    pub fn new(req: &Request, transport: &'a mut Transport<'b>)
+        -> ResponseBuilder<'a, 'b>
+    {
+        ResponseBuilder {
+            state: ResponseFsm::Head {
+                status: if req.method == Method::Get {
+                    StatusCode::NotFound
+                } else {
+                    StatusCode::BadRequest
+                },
+                version: req.version,
+                headers: Headers::new(),
+            },
+            transport: transport,
+        }
+    }
+}
 
-pub enum Client<C, H:Handler<C>> {
+/// A connection with a client.
+///
+/// The `Initial`, `KeepAlive` and `ReadHeaders` states are kept separate for
+/// debugging and different timeouts in future eventuallly.
+pub enum Client<C, H: Handler<C>> {
+    /// The initial state of a connection.
     Initial,
-    ReadHeaders,  // TODO(tailhook) 100 Expect?
+    /// The state after some headers have been read.
+    ReadHeaders, // TODO(tailhook) 100 Expect?
+    /// Not yet supported.
     Processing(H, PhantomData<*const C>),
-    // ReadFixedSize(Request, usize),  // TODO
-    // ReadChunked(Request, usize),
+    /// Reading a request body with a fixed size.
+    ///
+    /// The `usize` gives the number of remaining bytes.
+    ReadFixedSize(Request, usize),
+    // TODO ReadChunked(Request, usize),
+    /// A connection in idle state.
     KeepAlive,
 }
 
@@ -78,6 +108,15 @@ pub struct Request {
     pub uri: RequestUri,
     pub headers: Headers,
     pub body: Vec<u8>,
+}
+
+impl Request {
+    fn content_length(&self) -> Option<usize> {
+        if let Some(length_header) = self.headers.get::<ContentLength>() {
+            return Some(**length_header as usize)
+        }
+        None
+    }
 }
 
 fn parse_headers(transport: &mut Transport)
@@ -114,24 +153,6 @@ fn parse_headers(transport: &mut Transport)
     Ok(Some(req))
 }
 
-impl<C, H: Handler<C>> Client<C, H> {
-    fn handle_request(&self, req: Request, transport: &mut Transport,
-                        ctx: &mut C)
-    {
-        let mut bld = ResponseBuilder {
-            state: ResponseFsm::Head {
-                status: if req.method == Method::Get
-                    { StatusCode::NotFound } else { StatusCode::BadRequest },
-                version: req.version,
-                headers: Headers::new(),
-            },
-            transport: transport,
-        };
-        <H as Handler<C>>::request(req, &mut bld, ctx);
-        bld.default_body();
-    }
-}
-
 impl<C, H: Handler<C>> Protocol<C> for Client<C, H> {
     fn accepted<S: StreamSocket>(_conn: &mut S, _context: &mut C)
         -> Option<Self>
@@ -143,27 +164,41 @@ impl<C, H: Handler<C>> Protocol<C> for Client<C, H> {
     {
         use self::Client::*;
         match self {
-            // We keep Initial and KeepAlive states separate from
-            // ReadHeaders just for debugging and for potentially different
-            // timeouts in future
-            Initial|ReadHeaders|KeepAlive => {
+            Initial | ReadHeaders | KeepAlive => {
                 match parse_headers(transport) {
-                    Err(e) => {
-                        debug!("Error parsing HTTP headers: {}", e);
-                        Async::Stop
-                    }
-                    Ok(None) => {
-                        Async::Continue(ReadHeaders, ())
-                    }
+                    Err(_) => Async::Stop,
+                    Ok(None) => Async::Continue(ReadHeaders, ()),
                     Ok(Some(req)) => {
-                        self.handle_request(req, transport, ctx);
-                        Async::Continue(KeepAlive, ())
+                        if let Some(length) = req.content_length() {
+                            Async::Continue(ReadFixedSize(req, length), ())
+                        } else {
+                            let mut bld = ResponseBuilder::new(&req,
+                                                               transport);
+                            <H as Handler<C>>::request(req, &mut bld, ctx);
+                            bld.default_body();
+                            Async::Continue(Client::KeepAlive, ())
+                        }
                     }
                 }
             }
-            Processing(_, _) => {
-                unimplemented!();
+            ReadFixedSize(mut req, mut length) => {
+                {
+                    let mut buf = transport.input();
+                    let read_length = cmp::min(length, buf.len());
+                    length -= read_length;
+                    req.body.extend(&buf[..read_length]);
+                    buf.consume(read_length);
+                }
+                if length != 0 {
+                    Async::Continue(ReadFixedSize(req, length), ())
+                } else {
+                    let mut bld = ResponseBuilder::new(&req, transport);
+                    <H as Handler<C>>::request(req, &mut bld, ctx);
+                    bld.default_body();
+                    Async::Continue(Client::KeepAlive, ())
+                }
             }
+            _ => unimplemented!()
         }
     }
 }
