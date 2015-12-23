@@ -11,14 +11,15 @@ version = "0.3.0"
 authors = ["paul@colomiets.name"]
 
 [dependencies]
-hyper = "0.6.13"
-httparse = "1.0.0"
-netbuf = "0.2.0"
-log = "0.3.2"
-time = "0.1.23"
-mio = "0.4.3"
+hyper = "0.7"
+httparse = "1.1"
+netbuf = "0.3"
+log = "0.3"
+time = "0.1"
+mio = "0.5"
 # rotor = "0.4.0"
-rotor = { git = "git://github.com/tailhook/rotor", rev = "c4d8544" }
+rotor = { rev="d72c30c", git="git://github.com/tailhook/rotor" }
+rotor-stream = { rev="95f52d6", git="git://github.com/tailhook/rotor-stream" }
 
 [dev-dependencies]
 libc = "*"

@@ -4,14 +4,10 @@ extern crate hyper;
 extern crate httparse;
 extern crate netbuf;
 extern crate time;
-#[macro_use] extern crate log;
+extern crate rotor_stream;
 
-pub mod http1;
+pub mod server;
 
-use rotor::transports::{accept, stream};
+use rotor_stream::{Accept, Stream};
 use mio::tcp::{TcpListener, TcpStream};
-
-pub type HttpServer<C, R> = accept::Serve<C,
-                        TcpListener,
-                        stream::Stream<C, TcpStream, http1::Client<C, R>>>;
 
