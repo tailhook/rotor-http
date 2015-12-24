@@ -2,7 +2,7 @@ use hyper::version::HttpVersion as Version;
 use hyper::status::StatusCode;
 use time::Duration;
 use rotor::Scope;
-use rotor_stream::Deadline;
+use rotor_stream::{Deadline, StreamSocket};
 
 use super::context::Context;
 use super::request::Head;
@@ -28,7 +28,7 @@ pub enum RecvMode {
 /// A handler of server-side HTTP
 ///
 /// Used for all versions of HTTP
-pub trait Server<C: Context>: Sized {
+pub trait Server<C: Context, S: StreamSocket>: Sized {
     /// Encountered when headers received
     ///
     /// Returns self, mode and timeout for reading whole request.
@@ -37,19 +37,10 @@ pub trait Server<C: Context>: Sized {
     /// we need to read request body by chunk. It's recommended to return
     /// Buffered up to certain size, or at least for zero-length request.
     ///
-    /// Default implementation returns Buffered for all requests and allows
-    /// to receive any request size. It's okay for quick prototypes but bad
-    /// for the real work. (should we change that?)
-    ///
     /// In case there is Expect header, the successful (non-None) return of
     /// this handler means we shoul return `100 Expect` result
-    ///
-    fn headers_received(self, head: &Head, scope: &mut Scope<C>)
-        -> Result<(Self, RecvMode, Deadline), StatusCode>
-    {
-        Ok((self, RecvMode::Buffered,
-            Deadline::now() + Duration::seconds(90)))
-    }
+    fn headers_received(head: &Head, scope: &mut Scope<C>)
+        -> Result<(Self, RecvMode, Deadline), StatusCode>;
 
     /// Called when full request is received in buffered mode
     ///
@@ -60,7 +51,7 @@ pub trait Server<C: Context>: Sized {
     /// Note that even if you return None from handler, the data already
     /// written in Response is used and rotor-http does as much as it can
     /// to produce a valid response.
-    fn request_received(self, head: Head, response: &mut Response,
+    fn request_received(self, head: Head, response: &mut Response<S>,
         scope: &mut Scope<C>)
         -> Option<Self>;
 
@@ -68,7 +59,7 @@ pub trait Server<C: Context>: Sized {
     /// `Progressive(_)`. You may need to store the head somewhere for later
     /// use. You may start building a response right here, or wait for
     /// next event.
-    fn request_start(self, head: Head, response: &mut Response,
+    fn request_start(self, head: Head, response: &mut Response<S>,
         scope: &mut Scope<C>)
         -> Option<Self>;
 
@@ -81,16 +72,16 @@ pub trait Server<C: Context>: Sized {
     /// 1. Last chunk of request body may be smaller
     /// 2. Chunk is read up to some buffer size, which is heuristically
     ///    determined, and is usually larger than `nbytes`
-    fn request_chunk(self, chunk: &[u8], response: &mut Response,
+    fn request_chunk(self, chunk: &[u8], response: &mut Response<S>,
         scope: &mut Scope<C>)
         -> Option<Self>;
 
     /// End of request body, only for Progressive requests
-    fn request_end(self, response: &mut Response, scope: &mut Scope<C>)
+    fn request_end(self, response: &mut Response<S>, scope: &mut Scope<C>)
         -> Option<Self>;
 
-    fn timeout(self, response: &mut Response, scope: &mut Scope<C>)
+    fn timeout(self, response: &mut Response<S>, scope: &mut Scope<C>)
         -> Option<Self>;
-    fn wakeup(self, response: &mut Response, scope: &mut Scope<C>)
+    fn wakeup(self, response: &mut Response<S>, scope: &mut Scope<C>)
         -> Option<Self>;
 }

@@ -1,5 +1,5 @@
 use hyper::version::HttpVersion as Version;
-use hyper::status::StatusCode;
+use hyper::status::StatusCode::{self, BadRequest};
 use hyper::method::Method;
 use hyper::uri::RequestUri;
 use hyper::header::Headers;
@@ -24,7 +24,7 @@ pub struct Head {
 }
 
 impl Head {
-    pub fn parse(data: &[u8]) -> Result<Head, ()> {
+    pub fn parse(data: &[u8]) -> Result<Head, StatusCode> {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS_NUM];
         let mut raw = httparse::Request::new(&mut headers);
         match raw.parse(data) {
@@ -35,16 +35,18 @@ impl Head {
                     version: if raw.version.unwrap() == 1 { Version::Http11 }
                              else { Version::Http10 },
                     method: try!(raw.method.unwrap().parse()
-                        .map_err(|_| ())),
+                        .map_err(|_| BadRequest)),
                     uri: try!(raw.path.unwrap().parse()
-                        .map_err(|_| ())),
+                        .map_err(|_| BadRequest)),
                     headers: try!(Headers::from_raw(raw.headers)
-                        .map_err(|_| ())),
+                        .map_err(|_| BadRequest)),
                 })
             }
             Ok(_) => unreachable!(),
             Err(_) => {
-                return Err(());
+                // Anything to do with error?
+                // Should more precice errors be here?
+                return Err(BadRequest);
             }
         }
     }
