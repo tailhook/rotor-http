@@ -1,8 +1,13 @@
+use std::usize;
+use std::cmp::min;
+
+use netbuf;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport};
-use hyper::status::StatusCode;
+use hyper::status::StatusCode::{self, PayloadTooLarge};
 use hyper::method::Method::Head;
+use hyper::header::Expect;
 
 use super::{MAX_HEADERS_NUM, MAX_HEADERS_SIZE};
 use super::{Response};
@@ -12,21 +17,33 @@ use super::request::Head;
 use super::body::BodyKind;
 
 
+struct ReadBody<M: Sized> {
+    machine: M,
+    deadline: Deadline,
+    progress: BodyProgress,
+}
+
+pub enum BodyProgress {
+    /// Buffered fixed-size request (bytes left)
+    BufferFixed(usize),
+    /// Buffered request till end of input
+    BufferEOF,
+    /// Buffered request with chunked encoding (bytes left for current chunk)
+    BufferChunked(usize),
+    /// Progressive fixed-size request (size hint, bytes left)
+    ProgressiveFixed(usize, u64),
+    /// Progressive till end of input (size hint)
+    ProgressiveEOF(usize),
+    /// Progressive with chunked encoding (hint, bytes left for current chunk)
+    ProgressiveChunked(usize, u64),
+}
+
+
 pub enum Parser<M: Sized> {
     Idle,
     ReadHeaders,
-    /// Buffered fixed-size request (bytes left)
-    BufferFixed(M, usize),
-    /// Buffered request till end of input
-    BufferEOF(M),
-    /// Buffered request with chunked encoding (bytes left for current chunk)
-    BufferChunked(M, usize),
-    /// Progressive fixed-size request (bytes left)
-    ProgressiveFixed(M, u64),
-    /// Progressive till end of input
-    ProgressiveEOF(M),
-    /// Progressive with chunked encoding (bytes left for current chunk)
-    ProgressiveChunked(M, u64),
+    ReadingBody(ReadBody<M>),
+    /// Close connection after buffer is flushed. In other cases -> Idle
     DoneResponse,
 }
 
@@ -40,12 +57,42 @@ impl<M> Parser<M>
     }
 }
 
+fn start_headers<C: Context, M: Sized>(scope: &mut Scope<C>)
+    -> Request<Parser<M>>
+{
+    Some((Parser::ReadHeaders,
+          E::Delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE),
+          Deadline::now() + scope.byte_timeout()))
+}
+
+fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
+    use super::body::BodyKind::*;
+    use super::protocol::RecvMode::*;
+    use self::BodyProgress::*;
+
+    match (mode, body) {
+        // The size of Fixed(x) is checked above
+        (Buffered, Fixed(x)) => BufferFixed(x as usize),
+        (Buffered, Chunked) => BufferChunked(0),
+        (Buffered, Eof) => BufferEOF,
+        (Progressive(x), Fixed(y)) => ProgressiveFixed(x, y),
+        (Progressive(x), Chunked) => ProgressiveChunked(x, 0),
+        (Progressive(x), Eof) => ProgressiveEOF(x),
+        (_, Upgrade) => unimplemented!(),
+    }
+}
+
+// Parses headers
+//
+// On error returns bool, which is true if keep-alive connection can be
+// carried on.
 fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
-    scope: &mut Scope<C>) -> Request<Parser<M>>
+    scope: &mut Scope<C>) -> Result<ReadBody<M>, bool>
     where M: Server<C, S>,
           S: StreamSocket,
           C: Context,
 {
+    use self::Parser::*;
     // Determines if we can keep-alive after error response.
     // We may not be able to keep keep-alive for multiple reasons:
     //
@@ -64,12 +111,20 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
     // Determines if we can safely send the response body
     let mut is_head = false;
 
+    // TODO(tailhook) this should be contant
+    let MAX_BUFFERED_BODY: u64 = min(usize::MAX as u64,
+                                     netbuf::MAX_BUF_SIZE as u64);
+
     let status = match Head::parse(&transport.input()[..end+4]) {
         Ok(head) => {
             is_head = head.method == Head;
             match M::headers_received(&head, scope) {
                 Ok((m, mode, dline)) => {
                     match BodyKind::parse(&head) {
+                        // Note this check is needed for avoiding overflow
+                        // later
+                        Ok(BodyKind::Fixed(x)) if x > MAX_BUFFERED_BODY
+                        => Err(PayloadTooLarge),
                         Ok(body) => {
                             // TODO(tailhook)
                             // Probably can handle small
@@ -91,14 +146,23 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
     transport.input().consume(end+4);
     match status {
         Ok((head, body, m, mode, dline)) => {
-            // TODO(tailhook) first check for 101 expect, but not for http1.0
-            unimplemented!();
+            if head.headers.get::<Expect>() == Some(&Expect::Continue) {
+                // Handler has already approved request, so just push it
+                transport.output().extend(
+                    format!("{} 100 Continue\r\n\r\n", head.version)
+                    .as_bytes());
+            }
+            Ok(ReadBody {
+                machine: m,
+                deadline: dline,
+                progress: start_body(mode, body)
+            })
         }
         Err(status) => {
             let mut resp = Response::new(transport, is_head);
             scope.emit_error_page(status, &mut resp);
             resp.done();
-            return Parser::flush(scope);
+            Err(can_keep_alive)
         }
     }
 }
@@ -122,12 +186,21 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
         use self::Parser::*;
         match self {
             Idle => {
-                Some((Parser::ReadHeaders,
-                      E::Delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE),
-                      Deadline::now() + scope.byte_timeout()))
+                start_headers(scope)
             }
             ReadHeaders => {
-                parse_headers(transport, end, scope)
+                match parse_headers::<C, M, S>(transport, end, scope) {
+                    Ok(body) => {
+                        unimplemented!();
+                    }
+                    Err(can_keep_alive) => {
+                        if can_keep_alive {
+                            start_headers(scope)
+                        } else {
+                            Parser::flush(scope)
+                        }
+                    }
+                }
             }
             _ => unimplemented!(),
         }
