@@ -67,11 +67,13 @@ pub trait Server<C: Context, S: StreamSocket>: Sized {
     ///
     /// Whey you return `Progressive(nbytes)` from headers received, you
     /// may expect than chunk will be at least of `nbytes` of length. But
-    /// you must not rely on that for two reasons:
+    /// you must not rely on that for few reasons:
     ///
     /// 1. Last chunk of request body may be smaller
     /// 2. Chunk is read up to some buffer size, which is heuristically
     ///    determined, and is usually larger than `nbytes`
+    /// 3. Currently for chunked encoding we don't merge chunks, so last
+    ///    part of each chunk may be shorter as `nbytes`
     fn request_chunk(self, chunk: &[u8], response: &mut Response<S>,
         scope: &mut Scope<C>)
         -> Option<Self>;

@@ -167,6 +167,56 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
     }
 }
 
+impl<M> Parser<M>
+{
+    fn request<C>(self, scope: &mut Scope<C>) -> Request<Parser<M>>
+        where C: Context
+    {
+        use rotor_stream::Expectation::*;
+        use self::Parser::*;
+        use self::BodyProgress::*;
+        let (exp, dline) = match *&self {
+            Idle => (Bytes(0), None),
+            ReadHeaders => (Delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE), None),
+            ReadingBody(ref b) => {
+                let exp = match *&b.progress {
+                    BufferFixed(x) => Bytes(x),
+                    // No such stuff in Stream
+                    BufferEOF => unimplemented!(),
+                    BufferChunked(0) => {
+                        unimplemented!();
+                    }
+                    BufferChunked(x) => {
+                        // Need "Delimiter starting from" abstraction
+                        unimplemented!();
+                    }
+                    ProgressiveFixed(hint, left) => {
+                        Bytes(min(hint as u64, left) as usize)
+                    }
+                    // No such stuff in Stream
+                    ProgressiveEOF(hint) => {
+                        unimplemented!();
+                    }
+                    ProgressiveChunked(hint, 0) => {
+                        unimplemented!();
+                    }
+                    ProgressiveChunked(hint, left) => {
+                        Bytes(min(hint as u64, left) as usize)
+                    }
+                };
+                (exp, Some(b.deadline))
+            }
+            DoneResponse => (Flush(0), None),
+        };
+
+        let byte_dline = Deadline::now() + scope.byte_timeout();
+        let deadline = dline.map_or_else(
+            || byte_dline,
+            |x| min(byte_dline, x));
+        Some((self, exp, deadline))
+    }
+}
+
 impl<C, M, S> Protocol<C, S> for Parser<M>
     where M: Server<C, S>,
           S: StreamSocket,
@@ -191,7 +241,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             ReadHeaders => {
                 match parse_headers::<C, M, S>(transport, end, scope) {
                     Ok(body) => {
-                        unimplemented!();
+                        ReadingBody(body).request(scope)
                     }
                     Err(can_keep_alive) => {
                         if can_keep_alive {
@@ -202,14 +252,18 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                     }
                 }
             }
-            _ => unimplemented!(),
+            me @ ReadingBody(_) => me.request(scope),
+            me @ DoneResponse => me.request(scope),
         }
     }
     fn bytes_flushed(self, _transport: &mut Transport<S>,
-                     _scope: &mut Scope<C>)
+                     scope: &mut Scope<C>)
         -> Request<Self>
     {
-        unimplemented!();
+        match self {
+            Parser::DoneResponse => None,
+            me => me.request(scope),
+        }
     }
     fn timeout(self, _transport: &mut Transport<S>,
         _scope: &mut Scope<C>)
