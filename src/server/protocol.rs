@@ -37,7 +37,7 @@ pub enum RecvMode {
 /// A handler of server-side HTTP
 ///
 /// Used for all versions of HTTP
-pub trait Server<C: Context, S: StreamSocket>: Sized {
+pub trait Server<C: Context>: Sized {
     /// Encountered when headers received
     ///
     /// Returns self, mode and timeout for reading whole request.
@@ -59,7 +59,7 @@ pub trait Server<C: Context, S: StreamSocket>: Sized {
     ///
     /// You may start building a response right here, or wait for
     /// the next event.
-    fn request_start(self, head: Head, response: &mut Response<S>,
+    fn request_start(self, head: Head, response: &mut Response,
         scope: &mut Scope<C>)
         -> Option<Self>;
 
@@ -68,7 +68,7 @@ pub trait Server<C: Context, S: StreamSocket>: Sized {
     /// Note that even if you return None from handler, the data already
     /// written in Response is used and rotor-http does as much as it can
     /// to produce a valid response.
-    fn request_received(self, data: &[u8], response: &mut Response<S>,
+    fn request_received(self, data: &[u8], response: &mut Response,
         scope: &mut Scope<C>)
         -> Option<Self>;
 
@@ -84,16 +84,16 @@ pub trait Server<C: Context, S: StreamSocket>: Sized {
     ///    determined, and is usually larger than `nbytes`
     /// 3. Currently for chunked encoding we don't merge chunks, so last
     ///    part of each chunk may be shorter as `nbytes`
-    fn request_chunk(self, chunk: &[u8], response: &mut Response<S>,
+    fn request_chunk(self, chunk: &[u8], response: &mut Response,
         scope: &mut Scope<C>)
         -> Option<Self>;
 
     /// End of request body, only for Progressive requests
-    fn request_end(self, response: &mut Response<S>, scope: &mut Scope<C>)
+    fn request_end(self, response: &mut Response, scope: &mut Scope<C>)
         -> Option<Self>;
 
-    fn timeout(self, response: &mut Response<S>, scope: &mut Scope<C>)
+    fn timeout(self, response: &mut Response, scope: &mut Scope<C>)
         -> Option<Self>;
-    fn wakeup(self, response: &mut Response<S>, scope: &mut Scope<C>)
+    fn wakeup(self, response: &mut Response, scope: &mut Scope<C>)
         -> Option<Self>;
 }

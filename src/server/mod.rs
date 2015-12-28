@@ -5,6 +5,7 @@ mod parser;
 mod body;
 mod response;
 
+use netbuf::Buf;
 use rotor_stream::{Transport, StreamSocket};
 use hyper::method::Method::Head;
 
@@ -49,34 +50,36 @@ enum ResponseImpl {
     ChunkedBody,
 }
 
-pub struct Response<'a, 'b: 'a, S>(&'a mut Transport<'b, S>, ResponseImpl)
-    where S: StreamSocket;
+pub struct Response<'a>(&'a mut Buf, ResponseImpl);
 
+impl ResponseImpl {
+    fn with<'x>(self, out_buf: &'x mut Buf) -> Response<'x> {
+        Response(out_buf, self)
+    }
+}
 
-impl<'a, 'b: 'a, S: StreamSocket> Response<'a, 'b, S> {
+impl<'a> Response<'a> {
     fn internal(self) -> ResponseImpl {
         self.1
     }
 
     /// This is used for error pages, where it's impossible to parse input
     /// headers (i.e. get Head object needed for `Response::new`)
-    fn simple<'x, 'y>(trans: &'x mut Transport<'y, S>, is_head: bool)
-        -> Response<'x, 'y, S>
+    fn simple<'x>(out_buf: &'x mut Buf, is_head: bool) -> Response<'x>
     {
         use self::ResponseBody::*;
-        Response(trans, ResponseImpl::Start {
+        Response(out_buf, ResponseImpl::Start {
             body: if is_head { Ignored } else { Normal },
         })
     }
 
     /// Creates new response by extracting needed fields from Head
-    fn new<'x, 'y>(trans: &'x mut Transport<'y, S>, head: &Head)
-        -> Response<'x, 'y, S>
+    fn new<'x>(out_buf: &'x mut Buf, head: &Head) -> Response<'x>
     {
         use self::ResponseBody::*;
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
-        Response(trans, ResponseImpl::Start {
+        Response(out_buf, ResponseImpl::Start {
             body: if head.method == Head { Ignored } else { Normal },
         })
     }
@@ -86,13 +89,13 @@ impl<'a, 'b: 'a, S: StreamSocket> Response<'a, 'b, S> {
     fn done(self) {
         use self::ResponseImpl::*;
         use self::ResponseBody::*;
-        let Response(trans, me) = self;
+        let Response(buf, me) = self;
         match me {
             Start { body: Denied } | Start { body: Ignored } => {
-                trans.output().extend(NOT_IMPLEMENTED_HEAD.as_bytes());
+                buf.extend(NOT_IMPLEMENTED_HEAD.as_bytes());
             }
             Start { body: Normal } => {
-                trans.output().extend(NOT_IMPLEMENTED.as_bytes());
+                buf.extend(NOT_IMPLEMENTED.as_bytes());
             }
             Headers { body: Denied, .. } | Headers { body: Ignored, .. }=> {
                 // Just okay

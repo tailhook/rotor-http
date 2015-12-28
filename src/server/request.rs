@@ -16,6 +16,7 @@ use super::MAX_HEADERS_NUM;
 ///
 /// Note: we do our base to keep Head object same for HTTP 1-2 and HTTPS
 pub struct Head {
+    // TODO(tailhook) add source IP address
     pub version: Version,
     pub https: bool,
     pub method: Method,

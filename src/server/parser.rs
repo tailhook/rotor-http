@@ -93,7 +93,7 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
 // carried on.
 fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
     scope: &mut Scope<C>) -> Result<ReadBody<M>, bool>
-    where M: Server<C, S>,
+    where M: Server<C>,
           S: StreamSocket,
           C: Context,
 {
@@ -160,7 +160,7 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
                     format!("{} 100 Continue\r\n\r\n", head.version)
                     .as_bytes());
             }
-            let mut resp = Response::new(transport, &head);
+            let mut resp = Response::new(transport.output(), &head);
             let m = match m.request_start(head, &mut resp, scope) {
                 Some(m) => m,
                 None => {
@@ -178,7 +178,7 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
             })
         }
         Err(status) => {
-            let mut resp = Response::simple(transport, is_head);
+            let mut resp = Response::simple(transport.output(), is_head);
             scope.emit_error_page(status, &mut resp);
             // TODO(tailhook) probably find out whether we can
             // keep-alive by result of resp.done()
@@ -230,7 +230,7 @@ impl<M> Parser<M>
 }
 
 impl<C, M, S> Protocol<C, S> for Parser<M>
-    where M: Server<C, S>,
+    where M: Server<C>,
           S: StreamSocket,
           C: Context,
 {
@@ -246,6 +246,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
         -> Request<Self>
     {
         use self::Parser::*;
+        use self::BodyProgress::*;
         match self {
             Idle => {
                 start_headers(scope)
@@ -264,8 +265,38 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                     }
                 }
             }
-            me @ ReadingBody(_) => {
-                unimplemented!();
+            ReadingBody(rb) => {
+                let (inp, out) = transport.buffers();
+                let mut resp = rb.response.with(out);
+                let res = match rb.progress {
+                    BufferFixed(x) => {
+                        let m = rb.machine.request_received(&inp[..x],
+                                                    &mut resp, scope);
+                        m.map(|x| (x, None))
+                    }
+                    BufferEOF(..) => unimplemented!(),
+                    BufferChunked(..) => unimplemented!(),
+                    ProgressiveFixed(..) => unimplemented!(),
+                    ProgressiveEOF(..) => unimplemented!(),
+                    ProgressiveChunked(..) => unimplemented!(),
+                };
+                match res {
+                    Some((m, Some(p))) => {
+                        ReadingBody(ReadBody {
+                            machine: m,
+                            deadline: rb.deadline,
+                            progress: p,
+                            response: resp.internal(),
+                        }).request(scope)
+                    }
+                    Some((m, None)) => {
+                        Some((Processing(m, resp.internal(), rb.deadline),
+                              E::Sleep, rb.deadline))
+                    }
+                    None => {
+                        Parser::flush(scope)
+                    }
+                }
             }
             // Spurious event?
             me @ DoneResponse => me.request(scope),

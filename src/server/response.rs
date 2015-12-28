@@ -1,3 +1,4 @@
+use netbuf::Buf;
 use rotor_stream::{Transport, StreamSocket};
 
 use super::{Response, ResponseImpl};
@@ -22,5 +23,6 @@ pub const NOT_IMPLEMENTED: &'static str = concat!(
     );
 
 
-impl<'a, 'b: 'a, S: StreamSocket> Response<'a, 'b, S> {
+impl<'a> Response<'a> {
 }
+
