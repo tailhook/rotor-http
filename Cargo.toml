@@ -19,7 +19,7 @@ time = "0.1"
 mio = "0.5"
 # rotor = "0.4.0"
 rotor = { rev="d72c30c", git="git://github.com/tailhook/rotor" }
-rotor-stream = { rev="733c346", git="git://github.com/tailhook/rotor-stream" }
+rotor-stream = { rev="4c07ab0", git="git://github.com/tailhook/rotor-stream" }
 
 [dev-dependencies]
 libc = "*"

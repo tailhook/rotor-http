@@ -1,7 +1,7 @@
 use std::usize;
 use std::cmp::min;
 
-use netbuf;
+use netbuf::MAX_BUF_SIZE;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport};
@@ -26,10 +26,11 @@ struct ReadBody<M: Sized> {
 pub enum BodyProgress {
     /// Buffered fixed-size request (bytes left)
     BufferFixed(usize),
-    /// Buffered request till end of input
-    BufferEOF,
-    /// Buffered request with chunked encoding (bytes left for current chunk)
-    BufferChunked(usize),
+    /// Buffered request till end of input (byte limit)
+    BufferEOF(usize),
+    /// Buffered request with chunked encoding
+    /// (limit, bytes buffered, bytes left for current chunk)
+    BufferChunked(usize, usize, usize),
     /// Progressive fixed-size request (size hint, bytes left)
     ProgressiveFixed(usize, u64),
     /// Progressive till end of input (size hint)
@@ -61,7 +62,7 @@ fn start_headers<C: Context, M: Sized>(scope: &mut Scope<C>)
     -> Request<Parser<M>>
 {
     Some((Parser::ReadHeaders,
-          E::Delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE),
+          E::Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE),
           Deadline::now() + scope.byte_timeout()))
 }
 
@@ -71,10 +72,10 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
     use self::BodyProgress::*;
 
     match (mode, body) {
-        // The size of Fixed(x) is checked above
-        (Buffered, Fixed(x)) => BufferFixed(x as usize),
-        (Buffered, Chunked) => BufferChunked(0),
-        (Buffered, Eof) => BufferEOF,
+        // The size of Fixed(x) is checked in parse_headers
+        (Buffered(x), Fixed(y)) => BufferFixed(y as usize),
+        (Buffered(x), Chunked) => BufferChunked(x, 0, 0),
+        (Buffered(x), Eof) => BufferEOF(x),
         (Progressive(x), Fixed(y)) => ProgressiveFixed(x, y),
         (Progressive(x), Chunked) => ProgressiveChunked(x, 0),
         (Progressive(x), Eof) => ProgressiveEOF(x),
@@ -111,20 +112,15 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
     // Determines if we can safely send the response body
     let mut is_head = false;
 
-    // TODO(tailhook) this should be contant
-    let MAX_BUFFERED_BODY: u64 = min(usize::MAX as u64,
-                                     netbuf::MAX_BUF_SIZE as u64);
-
     let status = match Head::parse(&transport.input()[..end+4]) {
         Ok(head) => {
             is_head = head.method == Head;
             match M::headers_received(&head, scope) {
+                Ok((_, RecvMode::Buffered(x), _)) if x >= MAX_BUF_SIZE
+                => panic!("Can't buffer {} bytes, max {}",
+                          x, MAX_BUF_SIZE),
                 Ok((m, mode, dline)) => {
                     match BodyKind::parse(&head) {
-                        // Note this check is needed for avoiding overflow
-                        // later
-                        Ok(BodyKind::Fixed(x)) if x > MAX_BUFFERED_BODY
-                        => Err(PayloadTooLarge),
                         Ok(body) => {
                             // TODO(tailhook)
                             // Probably can handle small
@@ -133,7 +129,15 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
                             if body == BodyKind::Fixed(0) {
                                 can_keep_alive = true;
                             }
-                            Ok((head, body, m, mode, dline))
+                            match (body, mode) {
+                                (BodyKind::Fixed(x), RecvMode::Buffered(y))
+                                if x >= y as u64 => {
+                                    Err(PayloadTooLarge)
+                                }
+                                _ => {
+                                    Ok((head, body, m, mode, dline))
+                                }
+                            }
                         }
                         Err(status) => Err(status),
                     }
@@ -177,17 +181,15 @@ impl<M> Parser<M>
         use self::BodyProgress::*;
         let (exp, dline) = match *&self {
             Idle => (Bytes(0), None),
-            ReadHeaders => (Delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE), None),
+            ReadHeaders => (Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE), None),
             ReadingBody(ref b) => {
                 let exp = match *&b.progress {
                     BufferFixed(x) => Bytes(x),
-                    // No such stuff in Stream
-                    BufferEOF => unimplemented!(),
-                    BufferChunked(0) => {
+                    BufferEOF(x) => Eof(x),
+                    BufferChunked(limit, off, 0) => {
                         unimplemented!();
                     }
-                    BufferChunked(x) => {
-                        // Need "Delimiter starting from" abstraction
+                    BufferChunked(limit, off, y) => {
                         unimplemented!();
                     }
                     ProgressiveFixed(hint, left) => {
