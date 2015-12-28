@@ -9,7 +9,7 @@ use hyper::status::StatusCode::{self, PayloadTooLarge};
 use hyper::method::Method::Head;
 use hyper::header::Expect;
 
-use super::{MAX_HEADERS_NUM, MAX_HEADERS_SIZE};
+use super::{MAX_HEADERS_NUM, MAX_HEADERS_SIZE, MAX_CHUNK_HEAD};
 use super::{Response};
 use super::protocol::{Server, RecvMode};
 use super::context::Context;
@@ -36,6 +36,7 @@ pub enum BodyProgress {
     /// Progressive till end of input (size hint)
     ProgressiveEOF(usize),
     /// Progressive with chunked encoding (hint, bytes left for current chunk)
+    // To be able to merge chunks, should add offset here
     ProgressiveChunked(usize, u64),
 }
 
@@ -186,25 +187,16 @@ impl<M> Parser<M>
                 let exp = match *&b.progress {
                     BufferFixed(x) => Bytes(x),
                     BufferEOF(x) => Eof(x),
-                    BufferChunked(limit, off, 0) => {
-                        unimplemented!();
-                    }
-                    BufferChunked(limit, off, y) => {
-                        unimplemented!();
-                    }
-                    ProgressiveFixed(hint, left) => {
-                        Bytes(min(hint as u64, left) as usize)
-                    }
-                    // No such stuff in Stream
-                    ProgressiveEOF(hint) => {
-                        unimplemented!();
-                    }
-                    ProgressiveChunked(hint, 0) => {
-                        unimplemented!();
-                    }
-                    ProgressiveChunked(hint, left) => {
-                        Bytes(min(hint as u64, left) as usize)
-                    }
+                    BufferChunked(limit, off, 0)
+                    => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
+                    BufferChunked(limit, off, y) => Bytes(y),
+                    ProgressiveFixed(hint, left)
+                    => Bytes(min(hint as u64, left) as usize),
+                    ProgressiveEOF(hint) => Eof(hint),
+                    ProgressiveChunked(hint, 0)
+                    => Delimiter(0, b"\r\n", 0+MAX_CHUNK_HEAD),
+                    ProgressiveChunked(hint, left)
+                    => Bytes(min(hint as u64, left) as usize)
                 };
                 (exp, Some(b.deadline))
             }

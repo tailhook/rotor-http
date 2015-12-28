@@ -18,6 +18,14 @@ pub const MAX_HEADERS_NUM: usize = 256;
 /// This one is not preallocated, but too large buffer is of limited use
 /// because of previous parameter.
 pub const MAX_HEADERS_SIZE: usize = 16384;
+/// Maximum length of chunk size line. it would be okay with 12 bytes, but in
+/// theory there might be some extensions which we probably should skip
+///
+/// Note: we don't have a limit on chunk body size. In buffered request mode
+/// it's limited by either memory or artificial limit returned from handler.
+/// In unbuffered mode we can process chunk of unlimited size as long as
+/// request handler is able to handle it.
+pub const MAX_CHUNK_HEAD: usize = 128;
 
 pub enum ResponseBody {
     Normal,
