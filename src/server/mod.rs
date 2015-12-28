@@ -47,3 +47,10 @@ enum ResponseImpl {
 
 pub struct Response<'a, 'b: 'a, S>(&'a mut Transport<'b, S>, ResponseImpl)
     where S: StreamSocket;
+
+
+impl<'a, 'b: 'a, S: StreamSocket> Response<'a, 'b, S> {
+    fn internal(self) -> ResponseImpl {
+        self.1
+    }
+}

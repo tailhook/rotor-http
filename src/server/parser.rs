@@ -15,12 +15,14 @@ use super::protocol::{Server, RecvMode};
 use super::context::Context;
 use super::request::Head;
 use super::body::BodyKind;
+use super::ResponseImpl;
 
 
 struct ReadBody<M: Sized> {
     machine: M,
     deadline: Deadline,
     progress: BodyProgress,
+    response: ResponseImpl,
 }
 
 pub enum BodyProgress {
@@ -46,7 +48,7 @@ pub enum Parser<M: Sized> {
     ReadHeaders,
     ReadingBody(ReadBody<M>),
     /// Close connection after buffer is flushed. In other cases -> Idle
-    Processing(M, Deadline),
+    Processing(M, ResponseImpl, Deadline),
     DoneResponse,
 }
 
@@ -90,7 +92,7 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
 // On error returns bool, which is true if keep-alive connection can be
 // carried on.
 fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
-    scope: &mut Scope<C>) -> Result<ReadBody<M>, bool>
+    scope: &mut Scope<C>) -> Result<(Head, ReadBody<M>), bool>
     where M: Server<C, S>,
           S: StreamSocket,
           C: Context,
@@ -158,11 +160,12 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
                     format!("{} 100 Continue\r\n\r\n", head.version)
                     .as_bytes());
             }
-            Ok(ReadBody {
+            Ok((head, ReadBody {
                 machine: m,
                 deadline: dline,
-                progress: start_body(mode, body)
-            })
+                progress: start_body(mode, body),
+                response: Response::new(transport, is_head).internal(),
+            }))
         }
         Err(status) => {
             let mut resp = Response::new(transport, is_head);
@@ -237,8 +240,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             }
             ReadHeaders => {
                 match parse_headers::<C, M, S>(transport, end, scope) {
-                    Ok(body) => {
-                        unimplemented!();
+                    Ok((head, body)) => {
                         ReadingBody(body).request(scope)
                     }
                     Err(can_keep_alive) => {
@@ -255,8 +257,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             }
             // Spurious event?
             me @ DoneResponse => me.request(scope),
-            Processing(m, dline) => Some((Processing(m, dline),
-                                         E::Sleep, dline)),
+            Processing(m, r, dline) => Some((Processing(m, r, dline),
+                                             E::Sleep, dline)),
         }
     }
     fn bytes_flushed(self, _transport: &mut Transport<S>,
@@ -310,7 +312,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             ReadingBody(reader) => {
                 unimplemented!();
             }
-            Processing(_, _) => {
+            Processing(..) => {
                 unimplemented!();
             }
         }
