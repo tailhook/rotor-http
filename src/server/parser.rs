@@ -46,6 +46,7 @@ pub enum Parser<M: Sized> {
     ReadHeaders,
     ReadingBody(ReadBody<M>),
     /// Close connection after buffer is flushed. In other cases -> Idle
+    Processing(M, Deadline),
     DoneResponse,
 }
 
@@ -200,6 +201,8 @@ impl<M> Parser<M>
                 };
                 (exp, Some(b.deadline))
             }
+            Processing(..) => unreachable!(),
+            /// TODO(tailhook) fix output timeout
             DoneResponse => (Flush(0), None),
         };
 
@@ -235,19 +238,25 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             ReadHeaders => {
                 match parse_headers::<C, M, S>(transport, end, scope) {
                     Ok(body) => {
+                        unimplemented!();
                         ReadingBody(body).request(scope)
                     }
                     Err(can_keep_alive) => {
                         if can_keep_alive {
-                            start_headers(scope)
+                            Idle.request(scope)
                         } else {
                             Parser::flush(scope)
                         }
                     }
                 }
             }
-            me @ ReadingBody(_) => me.request(scope),
+            me @ ReadingBody(_) => {
+                unimplemented!();
+            }
+            // Spurious event?
             me @ DoneResponse => me.request(scope),
+            Processing(m, dline) => Some((Processing(m, dline),
+                                         E::Sleep, dline)),
         }
     }
     fn bytes_flushed(self, _transport: &mut Transport<S>,
@@ -270,18 +279,40 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
         -> Request<Self>
     {
         use self::Parser::*;
+        use self::BodyProgress::*;
+        // We may just flush and exit in every state. But:
+        // 1. The match asserts that we know which state parser may be in
+        // 2. We may send more specific response, so that browser will not
+        //    retry ugly request multiple times
         match self {
-            Idle => None,
-            ReadHeaders => {
+            ReadHeaders
                 // TODO(tailhook) send RequestHeaderFieldsTooLarge
+            | ReadingBody( ReadBody { progress: ProgressiveChunked(_, 0), ..})
+            | ReadingBody( ReadBody { progress: BufferChunked(_, _, 0), ..})
+                // TODO(tailhook) send BadRequest ?
+            => {
+                // Should we flush or just close?
+                // Probably closing is useful because previous responses might
+                // be absolutely valid, and we've got invalid pipelined
+                // request
                 Parser::flush(scope)
             }
-            _ => unimplemented!(),
+            // TODO(tailhook) Any other weird cases?
+            _ => unreachable!(),
         }
     }
-    fn wakeup(self, transport: &mut Transport<S>, _scope: &mut Scope<C>)
+    fn wakeup(self, transport: &mut Transport<S>, scope: &mut Scope<C>)
         -> Request<Self>
     {
-        unimplemented!();
+        use self::Parser::*;
+        match self {
+            me@Idle | me@ReadHeaders | me@DoneResponse => me.request(scope),
+            ReadingBody(reader) => {
+                unimplemented!();
+            }
+            Processing(_, _) => {
+                unimplemented!();
+            }
+        }
     }
 }
