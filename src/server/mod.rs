@@ -6,6 +6,10 @@ mod body;
 mod response;
 
 use rotor_stream::{Transport, StreamSocket};
+use hyper::method::Method::Head;
+
+use self::request::Head;
+use self::response::{NOT_IMPLEMENTED_HEAD, NOT_IMPLEMENTED};
 
 // TODO(tailhook) MAX_HEADERS_SIZE can be moved to Context
 // (i.e. made non-constant), but it's more of a problem for MAX_HEADERS_NUM
@@ -52,5 +56,76 @@ pub struct Response<'a, 'b: 'a, S>(&'a mut Transport<'b, S>, ResponseImpl)
 impl<'a, 'b: 'a, S: StreamSocket> Response<'a, 'b, S> {
     fn internal(self) -> ResponseImpl {
         self.1
+    }
+
+    /// This is used for error pages, where it's impossible to parse input
+    /// headers (i.e. get Head object needed for `Response::new`)
+    fn simple<'x, 'y>(trans: &'x mut Transport<'y, S>, is_head: bool)
+        -> Response<'x, 'y, S>
+    {
+        use self::ResponseBody::*;
+        Response(trans, ResponseImpl::Start {
+            body: if is_head { Ignored } else { Normal },
+        })
+    }
+
+    /// Creates new response by extracting needed fields from Head
+    fn new<'x, 'y>(trans: &'x mut Transport<'y, S>, head: &Head)
+        -> Response<'x, 'y, S>
+    {
+        use self::ResponseBody::*;
+        // TODO(tailhook) implement Connection: Close,
+        // (including explicit one in HTTP/1.0) and maybe others
+        Response(trans, ResponseImpl::Start {
+            body: if head.method == Head { Ignored } else { Normal },
+        })
+    }
+
+    // TODO(tailhook) probably return true if response is okay, and it's
+    // not a problem to reuse this keep-alive connection
+    fn done(self) {
+        use self::ResponseImpl::*;
+        use self::ResponseBody::*;
+        let Response(trans, me) = self;
+        match me {
+            Start { body: Denied } | Start { body: Ignored } => {
+                trans.output().extend(NOT_IMPLEMENTED_HEAD.as_bytes());
+            }
+            Start { body: Normal } => {
+                trans.output().extend(NOT_IMPLEMENTED.as_bytes());
+            }
+            Headers { body: Denied, .. } | Headers { body: Ignored, .. }=> {
+                // Just okay
+            }
+            Headers { body: Normal, content_length: Some(0), chunked: false }
+            => {
+                // Just okay
+            }
+            Headers { body: Normal, content_length: Some(_), chunked: false }
+            => {
+                // TODO(tailhook) incomplete response, what to do?
+                // should we close connection?
+                unimplemented!();
+            }
+            Headers { body: Normal, content_length: _, chunked: true } => {
+                // TODO(tailhook) emit headers and last chunk?
+                unimplemented!();
+            }
+            Headers { body: Normal, content_length: None, chunked: false } => {
+                // TODO(tailhook) probably incomplete headers, right?
+                unimplemented!();
+            }
+            ZeroBodyResponse | FixedSizeBody(0) => {
+                // Okay too
+            }
+            FixedSizeBody(usize) => {
+                // Incomplete response but we have nothing to do
+                // TODO(tailhook) log the error?
+            }
+            ChunkedBody => {
+                // TODO(tailhook) emit last chunk?
+                unimplemented!();
+            }
+        }
     }
 }

@@ -51,26 +51,27 @@ pub trait Server<C: Context, S: StreamSocket>: Sized {
     fn headers_received(head: &Head, scope: &mut Scope<C>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>;
 
-    /// Called when full request is received in buffered mode
+    /// Called immediately after `headers_received`.
     ///
     /// Note that `head` is passed here once, and forgotten by the
     /// protocol. If you need it later it's your responsibility to store it
     /// somewhere.
     ///
-    /// Note that even if you return None from handler, the data already
-    /// written in Response is used and rotor-http does as much as it can
-    /// to produce a valid response.
-    fn request_received(self, head: Head, response: &mut Response<S>,
-        scope: &mut Scope<C>)
-        -> Option<Self>;
-
-    /// Called immediately after `headers_received`, if it returns
-    /// `Progressive(_)`. You may need to store the head somewhere for later
-    /// use. You may start building a response right here, or wait for
-    /// next event.
+    /// You may start building a response right here, or wait for
+    /// the next event.
     fn request_start(self, head: Head, response: &mut Response<S>,
         scope: &mut Scope<C>)
         -> Option<Self>;
+
+    /// Called when full request is received in buffered mode
+    ///
+    /// Note that even if you return None from handler, the data already
+    /// written in Response is used and rotor-http does as much as it can
+    /// to produce a valid response.
+    fn request_received(self, data: &[u8], response: &mut Response<S>,
+        scope: &mut Scope<C>)
+        -> Option<Self>;
+
 
     /// Received chunk of data
     ///

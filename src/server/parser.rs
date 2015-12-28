@@ -92,7 +92,7 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
 // On error returns bool, which is true if keep-alive connection can be
 // carried on.
 fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
-    scope: &mut Scope<C>) -> Result<(Head, ReadBody<M>), bool>
+    scope: &mut Scope<C>) -> Result<ReadBody<M>, bool>
     where M: Server<C, S>,
           S: StreamSocket,
           C: Context,
@@ -160,16 +160,28 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
                     format!("{} 100 Continue\r\n\r\n", head.version)
                     .as_bytes());
             }
-            Ok((head, ReadBody {
+            let mut resp = Response::new(transport, &head);
+            let m = match m.request_start(head, &mut resp, scope) {
+                Some(m) => m,
+                None => {
+                    // TODO(tailhook) probably find out whether we can
+                    // keep-alive by result of resp.done()
+                    resp.done();
+                    return Err(false)
+                }
+            };
+            Ok(ReadBody {
                 machine: m,
                 deadline: dline,
                 progress: start_body(mode, body),
-                response: Response::new(transport, is_head).internal(),
-            }))
+                response: resp.internal(),
+            })
         }
         Err(status) => {
-            let mut resp = Response::new(transport, is_head);
+            let mut resp = Response::simple(transport, is_head);
             scope.emit_error_page(status, &mut resp);
+            // TODO(tailhook) probably find out whether we can
+            // keep-alive by result of resp.done()
             resp.done();
             Err(can_keep_alive)
         }
@@ -240,7 +252,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             }
             ReadHeaders => {
                 match parse_headers::<C, M, S>(transport, end, scope) {
-                    Ok((head, body)) => {
+                    Ok(body) => {
                         ReadingBody(body).request(scope)
                     }
                     Err(can_keep_alive) => {
