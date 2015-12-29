@@ -9,8 +9,12 @@ use netbuf::Buf;
 use hyper::method::Method::Head;
 use hyper::version::HttpVersion as Version;
 
-use self::request::Head;
 use self::response::{NOT_IMPLEMENTED_HEAD, NOT_IMPLEMENTED};
+
+pub use self::request::Head;
+pub use self::context::Context;
+pub use self::protocol::{RecvMode, Server};
+pub use self::parser::Parser;
 
 // TODO(tailhook) MAX_HEADERS_SIZE can be moved to Context
 // (i.e. made non-constant), but it's more of a problem for MAX_HEADERS_NUM

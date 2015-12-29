@@ -41,8 +41,9 @@ pub enum BodyProgress {
     ProgressiveChunked(usize, u64),
 }
 
+pub struct Parser<M: Sized>(ParserImpl<M>);
 
-pub enum Parser<M: Sized> {
+enum ParserImpl<M: Sized> {
     Idle,
     ReadHeaders,
     ReadingBody(ReadBody<M>),
@@ -56,7 +57,7 @@ impl<M> Parser<M>
     fn flush<C>(scope: &mut Scope<C>) -> Request<Parser<M>>
         where C: Context
     {
-        Some((Parser::DoneResponse, E::Flush(0),
+        Some((Parser(ParserImpl::DoneResponse), E::Flush(0),
               Deadline::now() + scope.byte_timeout()))
     }
 }
@@ -64,7 +65,7 @@ impl<M> Parser<M>
 fn start_headers<C: Context, M: Sized>(scope: &mut Scope<C>)
     -> Request<Parser<M>>
 {
-    Some((Parser::ReadHeaders,
+    Some((Parser(ParserImpl::ReadHeaders),
           E::Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE),
           Deadline::now() + scope.byte_timeout()))
 }
@@ -182,15 +183,15 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
     }
 }
 
-impl<M> Parser<M>
+impl<M> ParserImpl<M>
 {
     fn request<C>(self, scope: &mut Scope<C>) -> Request<Parser<M>>
         where C: Context
     {
         use rotor_stream::Expectation::*;
-        use self::Parser::*;
+        use self::ParserImpl::*;
         use self::BodyProgress::*;
-        let (exp, dline) = match *&self {
+        let (exp, dline) = match self {
             Idle => (Bytes(0), None),
             ReadHeaders => (Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE), None),
             ReadingBody(ref b) => {
@@ -219,7 +220,7 @@ impl<M> Parser<M>
         let deadline = dline.map_or_else(
             || byte_dline,
             |x| min(byte_dline, x));
-        Some((self, exp, deadline))
+        Some((Parser(self), exp, deadline))
     }
 }
 
@@ -232,16 +233,16 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
     fn create(_seed: (), _sock: &mut S, scope: &mut Scope<C>)
         -> Request<Self>
     {
-        Some((Parser::Idle, E::Bytes(1),
+        Some((Parser(ParserImpl::Idle), E::Bytes(1),
             Deadline::now() + scope.byte_timeout()))
     }
     fn bytes_read(self, transport: &mut Transport<S>,
                   end: usize, scope: &mut Scope<C>)
         -> Request<Self>
     {
-        use self::Parser::*;
+        use self::ParserImpl::*;
         use self::BodyProgress::*;
-        match self {
+        match self.0 {
             Idle => {
                 start_headers(scope)
             }
@@ -284,7 +285,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                         }).request(scope)
                     }
                     Some((m, None)) => {
-                        Some((Processing(m, resp.internal(), rb.deadline),
+                        Some((Parser(Processing(
+                                    m, resp.internal(), rb.deadline)),
                               E::Sleep, rb.deadline))
                     }
                     None => {
@@ -294,7 +296,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             }
             // Spurious event?
             me @ DoneResponse => me.request(scope),
-            Processing(m, r, dline) => Some((Processing(m, r, dline),
+            Processing(m, r, dline) => Some((Parser(Processing(m, r, dline)),
                                              E::Sleep, dline)),
         }
     }
@@ -302,8 +304,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                      scope: &mut Scope<C>)
         -> Request<Self>
     {
-        match self {
-            Parser::DoneResponse => None,
+        match self.0 {
+            ParserImpl::DoneResponse => None,
             me => me.request(scope),
         }
     }
@@ -317,13 +319,13 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
         scope: &mut Scope<C>)
         -> Request<Self>
     {
-        use self::Parser::*;
+        use self::ParserImpl::*;
         use self::BodyProgress::*;
         // We may just flush and exit in every state. But:
         // 1. The match asserts that we know which state parser may be in
         // 2. We may send more specific response, so that browser will not
         //    retry ugly request multiple times
-        match self {
+        match self.0 {
             ReadHeaders
                 // TODO(tailhook) send RequestHeaderFieldsTooLarge
             | ReadingBody( ReadBody { progress: ProgressiveChunked(_, 0), ..})
@@ -343,8 +345,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
     fn wakeup(self, _transport: &mut Transport<S>, scope: &mut Scope<C>)
         -> Request<Self>
     {
-        use self::Parser::*;
-        match self {
+        use self::ParserImpl::*;
+        match self.0 {
             me@Idle | me@ReadHeaders | me@DoneResponse => me.request(scope),
             ReadingBody(_reader) => {
                 unimplemented!();

@@ -245,7 +245,7 @@ impl<'a> Response<'a> {
                 }
             }
             FixedSizeBody(ref mut x) => {
-                if data.len() as u64 >= *x {
+                if data.len() as u64 > *x {
                     panic!("Fixed size response error. \
                         Bytes left {} but got additional {}", x, data.len());
                 }
