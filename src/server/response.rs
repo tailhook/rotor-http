@@ -81,9 +81,7 @@ impl<'a> Response<'a> {
                 //
                 // TODO(tailhook) should we assert?
                 //
-                write!(self.0, "{:03} {} {}\r\n", code,
-                    code.canonical_reason().unwrap_or("Unknown"),
-                    version).unwrap();
+                write!(self.0, "{} {}\r\n", version, code).unwrap();
                 if matches!(code, SwitchingProtocols|NoContent) {
                     body = Denied;
                 } else if body == Normal && code == NotModified {
@@ -151,7 +149,9 @@ impl<'a> Response<'a> {
                     }
                     None => {}
                 }
-                write!(self.0, "{}", HeaderFormatter(&header)).unwrap();
+                write!(self.0, "{}: {}\r\n",
+                    H::header_name(),
+                    HeaderFormatter(&header)).unwrap();
                 Ok(())
             }
             ref state => {
@@ -184,7 +184,7 @@ impl<'a> Response<'a> {
     pub fn done_headers(&mut self) -> Result<bool, HeaderError> {
         use super::ResponseBody::*;
         use super::ResponseImpl::*;
-        match self.1 {
+        let result = match self.1 {
             Start { .. } => {
                 panic!("Trying to send headers, but no response status yet");
             }
@@ -214,7 +214,9 @@ impl<'a> Response<'a> {
                 panic!("Called done_headers() method on  in a state {:?}",
                        state)
             }
-        }
+        };
+        self.0.write(b"\r\n").unwrap();
+        result
     }
     /// Write a chunk of the body
     ///
