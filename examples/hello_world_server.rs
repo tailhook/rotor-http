@@ -31,9 +31,18 @@ impl Counter for Context {
 
 impl rotor_http::server::Context for Context {
     // default impl is okay
+    fn byte_timeout(&self) -> Duration {
+        Duration::seconds(1000)
+    }
 }
 
-struct HelloWorld;
+enum HelloWorld {
+    Start,
+    Hello,
+    GetNum,
+    HelloName(String),
+    PageNotFound,
+}
 
 fn send_string(res: &mut Response, data: &[u8]) {
     res.status(hyper::status::StatusCode::Ok);
@@ -47,39 +56,53 @@ impl<C:Counter+rotor_http::server::Context> Server<C> for HelloWorld {
     fn headers_received(_head: &Head, _scope: &mut Scope<C>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
-        Ok((HelloWorld, RecvMode::Buffered(1024),
+        Ok((HelloWorld::Start, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
     }
-    fn request_start(self, head: Head, res: &mut Response,
+    fn request_start(self, head: Head, _res: &mut Response,
         scope: &mut Scope<C>)
         -> Option<Self>
     {
+        use self::HelloWorld::*;
         scope.increment();
         match head.uri {
             hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/" => {
-                send_string(res, b"Hello World!");
+                Some(Hello)
             }
             hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/num"
             => {
+                Some(GetNum)
+            }
+            hyper::uri::RequestUri::AbsolutePath(p) => {
+                Some(HelloName(p[1..].to_string()))
+            }
+            _ => {
+                Some(PageNotFound)
+            }
+        }
+    }
+    fn request_received(self, _data: &[u8], res: &mut Response,
+        scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        use self::HelloWorld::*;
+        match self {
+            Hello => {
+                send_string(res, b"Hello World!");
+            }
+            GetNum => {
                 send_string(res,
                     format!("This host has been visited {} times",
                         scope.get())
                     .as_bytes());
             }
-            hyper::uri::RequestUri::AbsolutePath(p) => {
-                send_string(res, format!("Hello {}!", &p[1..]).as_bytes());
+            HelloName(name) => {
+                send_string(res, format!("Hello {}!", name).as_bytes());
             }
-            _ => {
+            Start|PageNotFound => {
                 scope.emit_error_page(NotFound, res);
             }
         }
-        None
-    }
-    fn request_received(self, _data: &[u8], _response: &mut Response,
-        _scope: &mut Scope<C>)
-        -> Option<Self>
-    {
-        // we already responded at start
         None
     }
     fn request_chunk(self, _chunk: &[u8], _response: &mut Response,
