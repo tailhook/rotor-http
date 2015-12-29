@@ -1,8 +1,6 @@
-use hyper::version::HttpVersion as Version;
 use hyper::status::StatusCode;
-use time::Duration;
 use rotor::Scope;
-use rotor_stream::{Deadline, StreamSocket};
+use rotor_stream::{Deadline};
 
 use super::context::Context;
 use super::request::Head;

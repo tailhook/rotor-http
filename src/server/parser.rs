@@ -1,15 +1,14 @@
-use std::usize;
 use std::cmp::min;
 
 use netbuf::MAX_BUF_SIZE;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport};
-use hyper::status::StatusCode::{self, PayloadTooLarge};
+use hyper::status::StatusCode::{PayloadTooLarge};
 use hyper::method::Method::Head;
 use hyper::header::Expect;
 
-use super::{MAX_HEADERS_NUM, MAX_HEADERS_SIZE, MAX_CHUNK_HEAD};
+use super::{MAX_HEADERS_SIZE, MAX_CHUNK_HEAD};
 use super::{Response};
 use super::protocol::{Server, RecvMode};
 use super::context::Context;
@@ -77,7 +76,7 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
 
     match (mode, body) {
         // The size of Fixed(x) is checked in parse_headers
-        (Buffered(x), Fixed(y)) => BufferFixed(y as usize),
+        (Buffered(_), Fixed(y)) => BufferFixed(y as usize),
         (Buffered(x), Chunked) => BufferChunked(x, 0, 0),
         (Buffered(x), Eof) => BufferEOF(x),
         (Progressive(x), Fixed(y)) => ProgressiveFixed(x, y),
@@ -97,7 +96,6 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
           S: StreamSocket,
           C: Context,
 {
-    use self::Parser::*;
     // Determines if we can keep-alive after error response.
     // We may not be able to keep keep-alive for multiple reasons:
     //
@@ -199,13 +197,13 @@ impl<M> Parser<M>
                 let exp = match *&b.progress {
                     BufferFixed(x) => Bytes(x),
                     BufferEOF(x) => Eof(x),
-                    BufferChunked(limit, off, 0)
+                    BufferChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
-                    BufferChunked(limit, off, y) => Bytes(y),
+                    BufferChunked(limit, off, y) => Bytes(off + min(limit, y)),
                     ProgressiveFixed(hint, left)
                     => Bytes(min(hint as u64, left) as usize),
                     ProgressiveEOF(hint) => Eof(hint),
-                    ProgressiveChunked(hint, 0)
+                    ProgressiveChunked(_, 0)
                     => Delimiter(0, b"\r\n", 0+MAX_CHUNK_HEAD),
                     ProgressiveChunked(hint, left)
                     => Bytes(min(hint as u64, left) as usize)
@@ -342,13 +340,13 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             _ => unreachable!(),
         }
     }
-    fn wakeup(self, transport: &mut Transport<S>, scope: &mut Scope<C>)
+    fn wakeup(self, _transport: &mut Transport<S>, scope: &mut Scope<C>)
         -> Request<Self>
     {
         use self::Parser::*;
         match self {
             me@Idle | me@ReadHeaders | me@DoneResponse => me.request(scope),
-            ReadingBody(reader) => {
+            ReadingBody(_reader) => {
                 unimplemented!();
             }
             Processing(..) => {

@@ -1,6 +1,5 @@
 use hyper::status::StatusCode;
 use hyper::header::{ContentLength, ContentType};
-use rotor_stream::StreamSocket;
 use time::Duration;
 use hyper::mime::{Mime, TopLevel, SubLevel};
 

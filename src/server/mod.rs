@@ -6,7 +6,6 @@ mod body;
 mod response;
 
 use netbuf::Buf;
-use rotor_stream::{Transport, StreamSocket};
 use hyper::method::Method::Head;
 use hyper::version::HttpVersion as Version;
 
@@ -94,7 +93,7 @@ impl<'a> Response<'a> {
     }
 
     /// Returns true if it's okay too proceed with keep-alive connection
-    fn finish(mut self) -> bool {
+    fn finish(self) -> bool {
         use self::ResponseImpl::*;
         use self::ResponseBody::*;
         if self.is_complete() {

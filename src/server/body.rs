@@ -1,5 +1,5 @@
 use hyper::version::HttpVersion::Http10;
-use hyper::status::StatusCode::{self, PayloadTooLarge, BadRequest};
+use hyper::status::StatusCode::{self, BadRequest};
 use hyper::status::StatusCode::{LengthRequired};
 use hyper::header::{ContentLength, TransferEncoding, Connection};
 use hyper::header::{Encoding, ConnectionOption};
