@@ -164,10 +164,8 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
             let m = match m.request_start(head, &mut resp, scope) {
                 Some(m) => m,
                 None => {
-                    // TODO(tailhook) probably find out whether we can
-                    // keep-alive by result of resp.done()
-                    resp.done();
-                    return Err(false)
+                    let okay = resp.finish();
+                    return Err(okay);
                 }
             };
             Ok(ReadBody {
@@ -180,10 +178,8 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
         Err(status) => {
             let mut resp = Response::simple(transport.output(), is_head);
             scope.emit_error_page(status, &mut resp);
-            // TODO(tailhook) probably find out whether we can
-            // keep-alive by result of resp.done()
-            resp.done();
-            Err(can_keep_alive)
+            let okay = resp.finish();
+            Err(can_keep_alive && okay)
         }
     }
 }

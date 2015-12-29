@@ -8,6 +8,7 @@ mod response;
 use netbuf::Buf;
 use rotor_stream::{Transport, StreamSocket};
 use hyper::method::Method::Head;
+use hyper::version::HttpVersion as Version;
 
 use self::request::Head;
 use self::response::{NOT_IMPLEMENTED_HEAD, NOT_IMPLEMENTED};
@@ -32,6 +33,8 @@ pub const MAX_HEADERS_SIZE: usize = 16384;
 /// request handler is able to handle it.
 pub const MAX_CHUNK_HEAD: usize = 128;
 
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ResponseBody {
     Normal,
     Ignored,  // HEAD requests, 304 responses
@@ -39,15 +42,18 @@ pub enum ResponseBody {
 }
 
 
+#[derive(Debug)]
 enum ResponseImpl {
     /// Nothing has been sent
-    Start { body: ResponseBody },
+    Start { version: Version, body: ResponseBody },
     /// Status line is already in the buffer
     Headers { body: ResponseBody,
-              content_length: Option<usize>, chunked: bool },
-    ZeroBodyResponse,  // When allow_body = false
-    FixedSizeBody(usize),
+              content_length: Option<u64>, chunked: bool },
+    ZeroBodyResponse,  // When response body is Denied
+    IgnoredBody, // When response body is Ignored
+    FixedSizeBody(u64),
     ChunkedBody,
+    Done,
 }
 
 pub struct Response<'a>(&'a mut Buf, ResponseImpl);
@@ -70,6 +76,8 @@ impl<'a> Response<'a> {
         use self::ResponseBody::*;
         Response(out_buf, ResponseImpl::Start {
             body: if is_head { Ignored } else { Normal },
+            // Always assume HTTP/1.0 when version is unknown
+            version: Version::Http10,
         })
     }
 
@@ -81,54 +89,29 @@ impl<'a> Response<'a> {
         // (including explicit one in HTTP/1.0) and maybe others
         Response(out_buf, ResponseImpl::Start {
             body: if head.method == Head { Ignored } else { Normal },
+            version: head.version,
         })
     }
 
-    // TODO(tailhook) probably return true if response is okay, and it's
-    // not a problem to reuse this keep-alive connection
-    fn done(self) {
+    /// Returns true if it's okay too proceed with keep-alive connection
+    fn finish(mut self) -> bool {
         use self::ResponseImpl::*;
         use self::ResponseBody::*;
+        if self.is_complete() {
+            return true;
+        }
         let Response(buf, me) = self;
         match me {
-            Start { body: Denied } | Start { body: Ignored } => {
+            // If response is not even started yet, send something to make
+            // debugging easier
+            Start { body: Denied, .. } | Start { body: Ignored, .. } => {
                 buf.extend(NOT_IMPLEMENTED_HEAD.as_bytes());
             }
-            Start { body: Normal } => {
+            Start { body: Normal, .. } => {
                 buf.extend(NOT_IMPLEMENTED.as_bytes());
             }
-            Headers { body: Denied, .. } | Headers { body: Ignored, .. }=> {
-                // Just okay
-            }
-            Headers { body: Normal, content_length: Some(0), chunked: false }
-            => {
-                // Just okay
-            }
-            Headers { body: Normal, content_length: Some(_), chunked: false }
-            => {
-                // TODO(tailhook) incomplete response, what to do?
-                // should we close connection?
-                unimplemented!();
-            }
-            Headers { body: Normal, content_length: _, chunked: true } => {
-                // TODO(tailhook) emit headers and last chunk?
-                unimplemented!();
-            }
-            Headers { body: Normal, content_length: None, chunked: false } => {
-                // TODO(tailhook) probably incomplete headers, right?
-                unimplemented!();
-            }
-            ZeroBodyResponse | FixedSizeBody(0) => {
-                // Okay too
-            }
-            FixedSizeBody(usize) => {
-                // Incomplete response but we have nothing to do
-                // TODO(tailhook) log the error?
-            }
-            ChunkedBody => {
-                // TODO(tailhook) emit last chunk?
-                unimplemented!();
-            }
+            _ => {}
         }
+        return false;
     }
 }
