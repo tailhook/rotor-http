@@ -5,7 +5,7 @@ use netbuf::MAX_BUF_SIZE;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport};
-use hyper::status::StatusCode::{PayloadTooLarge};
+use hyper::status::StatusCode::{PayloadTooLarge, BadRequest};
 use hyper::method::Method::Head;
 use hyper::header::Expect;
 
@@ -58,6 +58,17 @@ impl<M> Parser<M>
     fn flush<C>(scope: &mut Scope<C>) -> Request<Parser<M>>
         where C: Context
     {
+        Some((Parser(ParserImpl::DoneResponse), E::Flush(0),
+              Deadline::now() + scope.byte_timeout()))
+    }
+    fn bad_request<'x, C>(scope: &mut Scope<C>, mut response: Response<'x>)
+        -> Request<Parser<M>>
+        where C: Context
+    {
+        if !response.is_started() {
+            scope.emit_error_page(BadRequest, &mut response);
+        }
+        response.finish();
         Some((Parser(ParserImpl::DoneResponse), E::Flush(0),
               Deadline::now() + scope.byte_timeout()))
     }
@@ -280,8 +291,9 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                         match val_opt {
                             Some(chunk_len) => {
                                 if off as u64 + chunk_len > limit as u64 {
-                                    // TODO(tailhook) log the message?
-                                    unimplemented!(); // drop connection
+                                    rb.machine.map(
+                                        |m| m.bad_request(&mut resp, scope));
+                                    return Parser::bad_request(scope, resp);
                                 }
                                 inp.remove_range(off..end);
                                 (rb.machine,
@@ -289,8 +301,9 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                                                   chunk_len as usize)))
                             }
                             None => {
-                                // TODO(tailhook) log the message?
-                                unimplemented!(); // drop connection
+                                rb.machine.map(
+                                    |m| m.bad_request(&mut resp, scope));
+                                return Parser::bad_request(scope, resp);
                             }
                         }
                     }

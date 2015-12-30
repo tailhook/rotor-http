@@ -10,10 +10,6 @@ pub trait Context {
     fn emit_error_page(&self,
         code: StatusCode, response: &mut Response)
     {
-        if response.is_started() {
-            // Too late, nothing to do
-            return;
-        }
         response.status(code);
         let data = format!("<h1>{} {}</h1>\n\
             <p><small>Served for you by rotor-http</small></p>\n",

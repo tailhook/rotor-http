@@ -70,6 +70,20 @@ pub trait Server<C: Context>: Sized {
         scope: &mut Scope<C>)
         -> Option<Self>;
 
+    /// Called when request become invalid between `request_start()`
+    /// and `request_received/request_end`
+    ///
+    /// You may put error page here if response is not `is_started()`. Or you
+    /// can finish response in case you can send something meaningfull anyway.
+    /// Otherwise, response will be filled with `BadRequest` from `Context` or
+    /// connection closed immediately (if `is_started()` is true). You
+    /// can't continue request processing after this handler is called.
+    ///
+    /// Currently method is only called on invalid chunked encoding, but we
+    /// are looking for extending the scope to also account other errors.
+    ///
+    /// Anyway it's never called on a timeout.
+    fn bad_request(self, _response: &mut Response, _scope: &mut Scope<C>) {}
 
     /// Received chunk of data
     ///
