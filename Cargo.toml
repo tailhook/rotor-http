@@ -13,7 +13,7 @@ authors = ["paul@colomiets.name"]
 [dependencies]
 hyper = "0.7"
 httparse = "1.1"
-netbuf = "0.3"
+netbuf = "0.3.1"
 log = "0.3"
 time = "0.1"
 mio = "0.5"

@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::str::from_utf8;
 
 use netbuf::MAX_BUF_SIZE;
 use rotor::Scope;
@@ -193,7 +194,7 @@ impl<M> ParserImpl<M>
                     BufferEOF(x) => Eof(x),
                     BufferChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
-                    BufferChunked(limit, off, y) => Bytes(off + min(limit, y)),
+                    BufferChunked(_, off, y) => Bytes(off + y),
                     ProgressiveFixed(hint, left)
                     => Bytes(min(hint as u64, left) as usize),
                     ProgressiveEOF(hint) => Eof(hint),
@@ -258,13 +259,44 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                 let mut resp = rb.response.with(out);
                 let (m, progress) = match rb.progress {
                     BufferFixed(x) => {
-                        let m = rb.machine
-                            .and_then(|m| m.request_received(
+                        let m = rb.machine.and_then(
+                            |m| m.request_received(
                                             &inp[..x], &mut resp, scope));
                         (m, None)
                     }
-                    BufferEOF(..) => unimplemented!(),
-                    BufferChunked(..) => unimplemented!(),
+                    BufferEOF(_) => {
+                        let len = inp.len();
+                        let m = rb.machine.and_then(
+                            |m| m.request_received(
+                                            &inp[..len], &mut resp, scope));
+                        (m, None)
+                    }
+                    BufferChunked(limit, off, 0) => {
+                        let clen_end = inp[off..end].iter()
+                            .position(|&x| x == b';')
+                            .map(|x| x + off).unwrap_or(end);
+                        let val_opt = from_utf8(&inp[off..clen_end]).ok()
+                            .and_then(|x| u64::from_str_radix(x, 16).ok());
+                        match val_opt {
+                            Some(chunk_len) => {
+                                if off as u64 + chunk_len > limit as u64 {
+                                    // TODO(tailhook) log the message?
+                                    unimplemented!(); // drop connection
+                                }
+                                inp.remove_range(off..end);
+                                (rb.machine,
+                                    Some(BufferChunked(limit, off,
+                                                  chunk_len as usize)))
+                            }
+                            None => {
+                                // TODO(tailhook) log the message?
+                                unimplemented!(); // drop connection
+                            }
+                        }
+                    }
+                    BufferChunked(limit, off, _) => {
+                        (rb.machine, Some(BufferChunked(limit, off, 0)))
+                    }
                     ProgressiveFixed(..) => unimplemented!(),
                     ProgressiveEOF(..) => unimplemented!(),
                     ProgressiveChunked(..) => unimplemented!(),
