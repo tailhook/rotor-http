@@ -202,7 +202,7 @@ impl<M> ParserImpl<M>
             ReadingBody(ref b) => {
                 let exp = match *&b.progress {
                     BufferFixed(x) => Bytes(x),
-                    BufferEOF(x) => Eof(x),
+                    BufferEOF(x) => BufferEof(x),
                     BufferChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
                     BufferChunked(_, off, y) => Bytes(off + y),
@@ -273,6 +273,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                         let m = rb.machine.and_then(
                             |m| m.request_received(
                                             &inp[..x], &mut resp, scope));
+                        inp.consume(x);
                         (m, None)
                     }
                     BufferEOF(_) => {
@@ -280,6 +281,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                         let m = rb.machine.and_then(
                             |m| m.request_received(
                                             &inp[..len], &mut resp, scope));
+                        inp.consume(len);
                         (m, None)
                     }
                     BufferChunked(limit, off, 0) => {
@@ -289,18 +291,27 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                         let val_opt = from_utf8(&inp[off..clen_end]).ok()
                             .and_then(|x| u64::from_str_radix(x, 16).ok());
                         match val_opt {
+                            Some(0) => {
+                                inp.remove_range(off..);
+                                let m = rb.machine.and_then(
+                                    |m| m.request_received(
+                                        &inp[..off], &mut resp, scope));
+                                inp.consume(off);
+                                (m, None)
+                            }
                             Some(chunk_len) => {
                                 if off as u64 + chunk_len > limit as u64 {
+                                    inp.consume(end+2);
                                     rb.machine.map(
                                         |m| m.bad_request(&mut resp, scope));
                                     return Parser::bad_request(scope, resp);
                                 }
-                                inp.remove_range(off..end);
                                 (rb.machine,
                                     Some(BufferChunked(limit, off,
                                                   chunk_len as usize)))
                             }
                             None => {
+                                inp.consume(end+2);
                                 rb.machine.map(
                                     |m| m.bad_request(&mut resp, scope));
                                 return Parser::bad_request(scope, resp);
@@ -310,9 +321,26 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                     BufferChunked(limit, off, _) => {
                         (rb.machine, Some(BufferChunked(limit, off, 0)))
                     }
-                    ProgressiveFixed(..) => unimplemented!(),
-                    ProgressiveEOF(..) => unimplemented!(),
-                    ProgressiveChunked(..) => unimplemented!(),
+                    ProgressiveFixed(hint, mut left) => {
+                        let real_bytes = min(inp.len() as u64, left) as usize;
+                        let m = rb.machine.and_then(
+                            |m| m.request_chunk(
+                                &inp[..real_bytes], &mut resp, scope));
+                        inp.consume(real_bytes);
+                        left -= real_bytes as u64;
+                        if left == 0 {
+                            let m = m.and_then(
+                                |m| m.request_end(&mut resp, scope));
+                            (m, None)
+                        } else {
+                            (m, Some(ProgressiveFixed(hint, left)))
+                        }
+                    }
+                    ProgressiveEOF(_hint) => {
+                        // TODO(tailhook) probably stream.eof should be impl
+                        unimplemented!();
+                    }
+                    ProgressiveChunked(_hints, _left) => unimplemented!(),
                 };
                 match progress {
                     Some(p) => {
@@ -330,6 +358,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                                  E::Sleep, rb.deadline))
                         }
                         None => {
+                            assert!(resp.is_complete());
                             Idle.request(scope)
                         }
                     }
