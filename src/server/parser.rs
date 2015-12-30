@@ -18,7 +18,7 @@ use super::ResponseImpl;
 
 
 struct ReadBody<M: Sized> {
-    machine: M,
+    machine: Option<M>,
     deadline: Deadline,
     progress: BodyProgress,
     response: ResponseImpl,
@@ -160,15 +160,8 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
                     .as_bytes());
             }
             let mut resp = Response::new(transport.output(), &head);
-            let m = match m.request_start(head, &mut resp, scope) {
-                Some(m) => m,
-                None => {
-                    let okay = resp.finish();
-                    return Err(okay);
-                }
-            };
             Ok(ReadBody {
-                machine: m,
+                machine: m.request_start(head, &mut resp, scope),
                 deadline: dline,
                 progress: start_body(mode, body),
                 response: resp.internal(),
@@ -263,11 +256,12 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             ReadingBody(rb) => {
                 let (inp, out) = transport.buffers();
                 let mut resp = rb.response.with(out);
-                let res = match rb.progress {
+                let (m, progress) = match rb.progress {
                     BufferFixed(x) => {
-                        let m = rb.machine.request_received(&inp[..x],
-                                                    &mut resp, scope);
-                        m.map(|x| (x, None))
+                        let m = rb.machine
+                            .and_then(|m| m.request_received(
+                                            &inp[..x], &mut resp, scope));
+                        (m, None)
                     }
                     BufferEOF(..) => unimplemented!(),
                     BufferChunked(..) => unimplemented!(),
@@ -275,8 +269,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                     ProgressiveEOF(..) => unimplemented!(),
                     ProgressiveChunked(..) => unimplemented!(),
                 };
-                match res {
-                    Some((m, Some(p))) => {
+                match progress {
+                    Some(p) => {
                         ReadingBody(ReadBody {
                             machine: m,
                             deadline: rb.deadline,
@@ -284,13 +278,15 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             response: resp.internal(),
                         }).request(scope)
                     }
-                    Some((m, None)) => {
-                        Some((Parser(Processing(
-                                    m, resp.internal(), rb.deadline)),
-                              E::Sleep, rb.deadline))
-                    }
-                    None => {
-                        Parser::flush(scope)
+                    None => match m {
+                        Some(m) => {
+                            Some((Parser(Processing(
+                                        m, resp.internal(), rb.deadline)),
+                                 E::Sleep, rb.deadline))
+                        }
+                        None => {
+                            Idle.request(scope)
+                        }
                     }
                 }
             }
