@@ -436,12 +436,6 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             me => me.request(scope),
         }
     }
-    fn timeout(self, _transport: &mut Transport<S>,
-        _scope: &mut Scope<C>)
-        -> Request<Self>
-    {
-        unimplemented!();
-    }
     fn exception(self, transport: &mut Transport<S>, exc: Exception,
         scope: &mut Scope<C>)
         -> Request<Self>
@@ -498,17 +492,32 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             WriteError(_) => None,
         }
     }
-    fn wakeup(self, _transport: &mut Transport<S>, scope: &mut Scope<C>)
+    fn timeout(self, _transport: &mut Transport<S>,
+        _scope: &mut Scope<C>)
+        -> Request<Self>
+    {
+        unimplemented!();
+    }
+    fn wakeup(self, transport: &mut Transport<S>, scope: &mut Scope<C>)
         -> Request<Self>
     {
         use self::ParserImpl::*;
         match self.0 {
             me@Idle | me@ReadHeaders | me@DoneResponse => me.request(scope),
-            ReadingBody(_reader) => {
-                unimplemented!();
+            ReadingBody(rb) => {
+                let mut resp = rb.response.with(transport.output());
+                let m = rb.machine.and_then(|m| m.wakeup(&mut resp, scope));
+                ReadingBody(ReadBody {
+                    machine: m,
+                    deadline: rb.deadline,
+                    progress: rb.progress,
+                    response: resp.internal(),
+                }).request(scope)
             }
-            Processing(..) => {
-                unimplemented!();
+            Processing(m, respimp, dline) => {
+                let mut resp = respimp.with(transport.output());
+                let mres = m.wakeup(&mut resp, scope);
+                Parser::complete(scope, mres, resp, dline)
             }
         }
     }
