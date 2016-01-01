@@ -79,10 +79,13 @@ pub trait Server<C: Context>: Sized {
     /// connection closed immediately (if `is_started()` is true). You
     /// can't continue request processing after this handler is called.
     ///
-    /// Currently method is only called on invalid chunked encoding, but we
-    /// are looking for extending the scope to also account other errors.
+    /// Currently it is called for two reasons:
     ///
-    /// Anyway it's never called on a timeout.
+    /// 1. Invalid chunked encoding
+    /// 2. End of stream before number of bytes mentioned in Content-Length
+    ///
+    /// It's never called on a timeout.
+    // TODO(tailhook) should there be some reason?
     fn bad_request(self, _response: &mut Response, _scope: &mut Scope<C>) {}
 
     /// Received chunk of data
@@ -104,8 +107,22 @@ pub trait Server<C: Context>: Sized {
     fn request_end(self, response: &mut Response, scope: &mut Scope<C>)
         -> Option<Self>;
 
+    /// Request timeout occured
+    ///
+    /// This is only called if headers are already received but state machine
+    /// is not yet finished. It drops down in two cases:
+    ///
+    /// 1. Receiving request
+    /// 2. Sending response
+    ///
+    /// If you received timeout you can return the new one, send error, or
+    /// finish response whatever you like. If response is not started yet at
+    /// the time method returns, client gets 408 error code.
+    ///
+    /// Unless you've returned the new timeout connection will be closed after
+    /// the event.
     fn timeout(self, response: &mut Response, scope: &mut Scope<C>)
-        -> Option<Self>;
+        -> Option<(Self, Deadline)>;
     fn wakeup(self, response: &mut Response, scope: &mut Scope<C>)
         -> Option<Self>;
 }

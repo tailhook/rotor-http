@@ -5,7 +5,8 @@ use netbuf::MAX_BUF_SIZE;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport, Exception};
-use hyper::status::StatusCode::{PayloadTooLarge, BadRequest};
+use hyper::status::StatusCode::{PayloadTooLarge, BadRequest, RequestTimeout};
+use hyper::status::StatusCode::{self, RequestHeaderFieldsTooLarge};
 use hyper::method::Method::Head;
 use hyper::header::Expect;
 
@@ -61,25 +62,26 @@ impl<M> Parser<M>
         Some((Parser(ParserImpl::DoneResponse), E::Flush(0),
               Deadline::now() + scope.byte_timeout()))
     }
-    fn bad_request<'x, C>(scope: &mut Scope<C>, mut response: Response<'x>)
+    fn error<'x, C>(scope: &mut Scope<C>, mut response: Response<'x>,
+        code: StatusCode)
         -> Request<Parser<M>>
         where C: Context
     {
         if !response.is_started() {
-            scope.emit_error_page(BadRequest, &mut response);
+            scope.emit_error_page(code, &mut response);
         }
         response.finish();
         Some((Parser(ParserImpl::DoneResponse), E::Flush(0),
               Deadline::now() + scope.byte_timeout()))
     }
-    fn raw_bad_request<'x, C, S>(scope: &mut Scope<C>,
-        transport: &mut Transport<S>)
+    fn raw_error<'x, C, S>(scope: &mut Scope<C>,
+        transport: &mut Transport<S>, code: StatusCode)
         -> Request<Parser<M>>
         where C: Context,
               S: StreamSocket
     {
         let resp = Response::simple(transport.output(), false);
-        Parser::bad_request(scope, resp)
+        Parser::error(scope, resp, code)
     }
     fn complete<'x, C>(scope: &mut Scope<C>, machine: Option<M>,
         response: Response<'x>, deadline: Deadline)
@@ -325,7 +327,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                                     inp.consume(end+2);
                                     rb.machine.map(
                                         |m| m.bad_request(&mut resp, scope));
-                                    return Parser::bad_request(scope, resp);
+                                    return Parser::error(scope, resp,
+                                                         BadRequest);
                                 }
                                 inp.remove_range(off..end+2);
                                 (rb.machine,
@@ -336,7 +339,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                                 inp.consume(end+2);
                                 rb.machine.map(
                                     |m| m.bad_request(&mut resp, scope));
-                                return Parser::bad_request(scope, resp);
+                                return Parser::error(scope, resp,
+                                                     BadRequest);
                             }
                         }
                     }
@@ -390,7 +394,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                                 inp.consume(end+2);
                                 rb.machine.map(
                                     |m| m.bad_request(&mut resp, scope));
-                                return Parser::bad_request(scope, resp);
+                                return Parser::error(scope, resp, BadRequest);
                             }
                         }
                     }
@@ -447,15 +451,16 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             LimitReached => {
                 match self.0 {
                     ReadHeaders => {
-                        // TODO(tailhook) send RequestHeaderFieldsTooLarge ?
-                        Parser::raw_bad_request(scope, transport)
+                        Parser::raw_error(scope, transport,
+                            RequestHeaderFieldsTooLarge)
                     }
                     ReadingBody(rb) => {
                         assert!(matches!(rb.progress,
                             ProgressiveChunked(_, _, 0) |
                             BufferChunked(_, _, 0)));
-                        Parser::bad_request(scope,
-                            rb.response.with(transport.output()))
+                        let mut resp = rb.response.with(transport.output());
+                        rb.machine.map(|m| m.bad_request(&mut resp, scope));
+                        Parser::error(scope, resp, BadRequest)
                     }
                     _ => unreachable!(),
                 }
@@ -479,8 +484,11 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             }
                             _ => {
                                 // Incomplete request
-                                Parser::bad_request(scope,
-                                    rb.response.with(transport.output()))
+                                let mut resp = rb.response.with(
+                                    transport.output());
+                                rb.machine.map(
+                                    |m| m.bad_request(&mut resp, scope));
+                                Parser::error(scope, resp, BadRequest)
                             }
                         }
                     }
@@ -492,11 +500,40 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             WriteError(_) => None,
         }
     }
-    fn timeout(self, _transport: &mut Transport<S>,
-        _scope: &mut Scope<C>)
+    fn timeout(self, transport: &mut Transport<S>, scope: &mut Scope<C>)
         -> Request<Self>
     {
-        unimplemented!();
+        use self::ParserImpl::*;
+        match self.0 {
+            Idle | DoneResponse => None,
+            ReadHeaders => {
+                Parser::raw_error(scope, transport, RequestTimeout)
+            }
+            ReadingBody(rb) => {
+                let mut resp = rb.response.with(transport.output());
+                let res = rb.machine.and_then(|m| m.timeout(&mut resp, scope));
+                match res {
+                    Some((m, deadline)) => {
+                        ReadingBody(ReadBody {
+                            machine: Some(m),
+                            deadline: deadline,
+                            progress: rb.progress,
+                            response: resp.internal(),
+                        }).request(scope)
+                    }
+                    None => Parser::error(scope, resp, RequestTimeout),
+                }
+            }
+            Processing(m, respimp, _) => {
+                let mut resp = respimp.with(transport.output());
+                match m.timeout(&mut resp, scope) {
+                    Some((m, dline)) => {
+                        Parser::complete(scope, Some(m), resp, dline)
+                    }
+                    None => Parser::error(scope, resp, RequestTimeout),
+                }
+            }
+        }
     }
     fn wakeup(self, transport: &mut Transport<S>, scope: &mut Scope<C>)
         -> Request<Self>

@@ -123,7 +123,7 @@ impl<C:Counter+rotor_http::server::Context> Server<C> for HelloWorld {
     }
 
     fn timeout(self, _response: &mut Response, _scope: &mut Scope<C>)
-        -> Option<Self>
+        -> Option<(Self, Deadline)>
     {
         unimplemented!();
     }
