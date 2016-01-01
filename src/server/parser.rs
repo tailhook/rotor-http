@@ -37,9 +37,9 @@ pub enum BodyProgress {
     ProgressiveFixed(usize, u64),
     /// Progressive till end of input (size hint)
     ProgressiveEOF(usize),
-    /// Progressive with chunked encoding (hint, bytes left for current chunk)
-    // To be able to merge chunks, should add offset here
-    ProgressiveChunked(usize, u64),
+    /// Progressive with chunked encoding
+    /// (hint, offset, bytes left for current chunk)
+    ProgressiveChunked(usize, usize, u64),
 }
 
 pub struct Parser<M: Sized>(ParserImpl<M>);
@@ -121,7 +121,7 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
         (Buffered(x), Chunked) => BufferChunked(x, 0, 0),
         (Buffered(x), Eof) => BufferEOF(x),
         (Progressive(x), Fixed(y)) => ProgressiveFixed(x, y),
-        (Progressive(x), Chunked) => ProgressiveChunked(x, 0),
+        (Progressive(x), Chunked) => ProgressiveChunked(x, 0, 0),
         (Progressive(x), Eof) => ProgressiveEOF(x),
         (_, Upgrade) => unimplemented!(),
     }
@@ -237,10 +237,10 @@ impl<M> ParserImpl<M>
                     ProgressiveFixed(hint, left)
                     => Bytes(min(hint as u64, left) as usize),
                     ProgressiveEOF(hint) => Bytes(hint),
-                    ProgressiveChunked(_, 0)
-                    => Delimiter(0, b"\r\n", 0+MAX_CHUNK_HEAD),
-                    ProgressiveChunked(hint, left)
-                    => Bytes(min(hint as u64, left) as usize)
+                    ProgressiveChunked(_, off, 0)
+                    => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
+                    ProgressiveChunked(hint, off, left)
+                    => Bytes(min(hint as u64, off as u64 +left) as usize)
                 };
                 (exp, Some(b.deadline))
             }
@@ -313,7 +313,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             .and_then(|x| u64::from_str_radix(x, 16).ok());
                         match val_opt {
                             Some(0) => {
-                                inp.remove_range(off..);
+                                inp.remove_range(off..end+2);
                                 let m = rb.machine.and_then(
                                     |m| m.request_received(
                                         &inp[..off], &mut resp, scope));
@@ -327,6 +327,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                                         |m| m.bad_request(&mut resp, scope));
                                     return Parser::bad_request(scope, resp);
                                 }
+                                inp.remove_range(off..end+2);
                                 (rb.machine,
                                     Some(BufferChunked(limit, off,
                                                   chunk_len as usize)))
@@ -364,7 +365,49 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             |m| m.request_chunk(&inp[..ln], &mut resp, scope));
                         (m, Some(ProgressiveEOF(hint)))
                     }
-                    ProgressiveChunked(_hints, _left) => unimplemented!(),
+                    ProgressiveChunked(hint, off, 0) => {
+                        let clen_end = inp[off..end].iter()
+                            .position(|&x| x == b';')
+                            .map(|x| x + off).unwrap_or(end);
+                        let val_opt = from_utf8(&inp[off..clen_end]).ok()
+                            .and_then(|x| u64::from_str_radix(x, 16).ok());
+                        match val_opt {
+                            Some(0) => {
+                                inp.remove_range(off..end+2);
+                                let m = rb.machine.and_then(
+                                    |m| m.request_received(
+                                        &inp[..off], &mut resp, scope));
+                                inp.consume(off);
+                                (m, None)
+                            }
+                            Some(chunk_len) => {
+                                inp.remove_range(off..end+2);
+                                (rb.machine,
+                                    Some(ProgressiveChunked(hint, off,
+                                                  chunk_len)))
+                            }
+                            None => {
+                                inp.consume(end+2);
+                                rb.machine.map(
+                                    |m| m.bad_request(&mut resp, scope));
+                                return Parser::bad_request(scope, resp);
+                            }
+                        }
+                    }
+                    ProgressiveChunked(hint, off, mut left) => {
+                        let ln = min(off as u64 + left, inp.len() as u64) as usize;
+                        left -= (ln - off) as u64;
+                        if ln < hint {
+                            (rb.machine,
+                                Some(ProgressiveChunked(hint, ln, left)))
+                        } else {
+                            let m = rb.machine.and_then(
+                                |m| m.request_chunk(&inp[..ln],
+                                    &mut resp, scope));
+                            inp.consume(ln);
+                            (m, Some(ProgressiveChunked(hint, 0, left)))
+                        }
+                    }
                 };
                 match progress {
                     Some(p) => {
@@ -415,7 +458,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                     }
                     ReadingBody(rb) => {
                         assert!(matches!(rb.progress,
-                            ProgressiveChunked(_, 0)|BufferChunked(_, _, 0)));
+                            ProgressiveChunked(_, _, 0) |
+                            BufferChunked(_, _, 0)));
                         Parser::bad_request(scope,
                             rb.response.with(transport.output()))
                     }
