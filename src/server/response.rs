@@ -285,9 +285,9 @@ impl<'a> Response<'a> {
                 self.0.write(b"0\r\n").unwrap();
                 self.1 = Done;
             }
-            FixedSizeBody(0) => {}
-            ZeroBodyResponse => {}
-            IgnoredBody => {}
+            FixedSizeBody(0) => self.1 = Done,
+            ZeroBodyResponse => self.1 = Done,
+            IgnoredBody => self.1 = Done,
             Done => {}  // multiple invocations are okay
             ref state => {
                 panic!("Called done() method on response in a state {:?}",

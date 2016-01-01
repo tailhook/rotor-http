@@ -36,6 +36,8 @@ impl rotor_http::server::Context for Context {
     }
 }
 
+
+#[derive(Debug, Clone)]
 enum HelloWorld {
     Start,
     Hello,
@@ -99,7 +101,8 @@ impl<C:Counter+rotor_http::server::Context> Server<C> for HelloWorld {
             HelloName(name) => {
                 send_string(res, format!("Hello {}!", name).as_bytes());
             }
-            Start|PageNotFound => {
+            Start => unreachable!(),
+            PageNotFound => {
                 scope.emit_error_page(NotFound, res);
             }
         }

@@ -4,7 +4,7 @@ use std::str::from_utf8;
 use netbuf::MAX_BUF_SIZE;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
-use rotor_stream::{Request, Transport};
+use rotor_stream::{Request, Transport, Exception};
 use hyper::status::StatusCode::{PayloadTooLarge, BadRequest};
 use hyper::method::Method::Head;
 use hyper::header::Expect;
@@ -71,6 +71,34 @@ impl<M> Parser<M>
         response.finish();
         Some((Parser(ParserImpl::DoneResponse), E::Flush(0),
               Deadline::now() + scope.byte_timeout()))
+    }
+    fn raw_bad_request<'x, C, S>(scope: &mut Scope<C>,
+        transport: &mut Transport<S>)
+        -> Request<Parser<M>>
+        where C: Context,
+              S: StreamSocket
+    {
+        let resp = Response::simple(transport.output(), false);
+        Parser::bad_request(scope, resp)
+    }
+    fn complete<'x, C>(scope: &mut Scope<C>, machine: Option<M>,
+        response: Response<'x>, deadline: Deadline)
+        -> Request<Parser<M>>
+        where C: Context
+    {
+        match machine {
+            Some(m) => {
+                Some((Parser(
+                    ParserImpl::Processing(m, response.internal(), deadline)),
+                    E::Sleep, deadline))
+            }
+            None => {
+                // TODO(tailhook) probably we should do something better than
+                // an assert?
+                assert!(response.is_complete());
+                ParserImpl::Idle.request(scope)
+            }
+        }
     }
 }
 
@@ -202,13 +230,13 @@ impl<M> ParserImpl<M>
             ReadingBody(ref b) => {
                 let exp = match *&b.progress {
                     BufferFixed(x) => Bytes(x),
-                    BufferEOF(x) => BufferEof(x),
+                    BufferEOF(x) => Bytes(x),
                     BufferChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
                     BufferChunked(_, off, y) => Bytes(off + y),
                     ProgressiveFixed(hint, left)
                     => Bytes(min(hint as u64, left) as usize),
-                    ProgressiveEOF(hint) => Eof(hint),
+                    ProgressiveEOF(hint) => Bytes(hint),
                     ProgressiveChunked(_, 0)
                     => Delimiter(0, b"\r\n", 0+MAX_CHUNK_HEAD),
                     ProgressiveChunked(hint, left)
@@ -276,14 +304,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                         inp.consume(x);
                         (m, None)
                     }
-                    BufferEOF(_) => {
-                        let len = inp.len();
-                        let m = rb.machine.and_then(
-                            |m| m.request_received(
-                                            &inp[..len], &mut resp, scope));
-                        inp.consume(len);
-                        (m, None)
-                    }
+                    BufferEOF(_) => unreachable!(),
                     BufferChunked(limit, off, 0) => {
                         let clen_end = inp[off..end].iter()
                             .position(|&x| x == b';')
@@ -318,8 +339,9 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             }
                         }
                     }
-                    BufferChunked(limit, off, _) => {
-                        (rb.machine, Some(BufferChunked(limit, off, 0)))
+                    BufferChunked(limit, off, bytes) => {
+                        debug_assert!(bytes == end);
+                        (rb.machine, Some(BufferChunked(limit, off+bytes, 0)))
                     }
                     ProgressiveFixed(hint, mut left) => {
                         let real_bytes = min(inp.len() as u64, left) as usize;
@@ -336,9 +358,11 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             (m, Some(ProgressiveFixed(hint, left)))
                         }
                     }
-                    ProgressiveEOF(_hint) => {
-                        // TODO(tailhook) probably stream.eof should be impl
-                        unimplemented!();
+                    ProgressiveEOF(hint) => {
+                        let ln = inp.len();
+                        let m = rb.machine.and_then(
+                            |m| m.request_chunk(&inp[..ln], &mut resp, scope));
+                        (m, Some(ProgressiveEOF(hint)))
                     }
                     ProgressiveChunked(_hints, _left) => unimplemented!(),
                 };
@@ -351,17 +375,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             response: resp.internal(),
                         }).request(scope)
                     }
-                    None => match m {
-                        Some(m) => {
-                            Some((Parser(Processing(
-                                        m, resp.internal(), rb.deadline)),
-                                 E::Sleep, rb.deadline))
-                        }
-                        None => {
-                            assert!(resp.is_complete());
-                            Idle.request(scope)
-                        }
-                    }
+                    None => Parser::complete(scope, m, resp, rb.deadline)
                 }
             }
             // Spurious event?
@@ -385,31 +399,59 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
     {
         unimplemented!();
     }
-    fn delimiter_not_found(self, _transport: &mut Transport<S>,
+    fn exception(self, transport: &mut Transport<S>, exc: Exception,
         scope: &mut Scope<C>)
         -> Request<Self>
     {
         use self::ParserImpl::*;
         use self::BodyProgress::*;
-        // We may just flush and exit in every state. But:
-        // 1. The match asserts that we know which state parser may be in
-        // 2. We may send more specific response, so that browser will not
-        //    retry ugly request multiple times
-        match self.0 {
-            ReadHeaders
-                // TODO(tailhook) send RequestHeaderFieldsTooLarge
-            | ReadingBody( ReadBody { progress: ProgressiveChunked(_, 0), ..})
-            | ReadingBody( ReadBody { progress: BufferChunked(_, _, 0), ..})
-                // TODO(tailhook) send BadRequest ?
-            => {
-                // Should we flush or just close?
-                // Probably closing is useful because previous responses might
-                // be absolutely valid, and we've got invalid pipelined
-                // request
-                Parser::flush(scope)
+        use rotor_stream::Exception::*;
+        match exc {
+            LimitReached => {
+                match self.0 {
+                    ReadHeaders => {
+                        // TODO(tailhook) send RequestHeaderFieldsTooLarge ?
+                        Parser::raw_bad_request(scope, transport)
+                    }
+                    ReadingBody(rb) => {
+                        assert!(matches!(rb.progress,
+                            ProgressiveChunked(_, 0)|BufferChunked(_, _, 0)));
+                        Parser::bad_request(scope,
+                            rb.response.with(transport.output()))
+                    }
+                    _ => unreachable!(),
+                }
             }
-            // TODO(tailhook) Any other weird cases?
-            _ => unreachable!(),
+            EndOfStream => {
+                match self.0 {
+                    ReadingBody(rb) => {
+                        match rb.progress {
+                            BufferEOF(_) | ProgressiveEOF(_) => {
+                                let (inp, out) = transport.buffers();
+                                let mut resp = rb.response.with(out);
+                                let mut m = rb.machine;
+                                if inp.len() > 0 {
+                                    m = m.and_then(
+                                        |m| m.request_chunk(
+                                            &inp[..], &mut resp, scope));
+                                }
+                                m = m.and_then(
+                                    |m| m.request_end(&mut resp, scope));
+                                Parser::complete(scope, m, resp, rb.deadline)
+                            }
+                            _ => {
+                                // Incomplete request
+                                Parser::bad_request(scope,
+                                    rb.response.with(transport.output()))
+                            }
+                        }
+                    }
+                    Processing(..) => unreachable!(),
+                    Idle | ReadHeaders | DoneResponse => None,
+                }
+            }
+            ReadError(_) => None,
+            WriteError(_) => None,
         }
     }
     fn wakeup(self, _transport: &mut Transport<S>, scope: &mut Scope<C>)
