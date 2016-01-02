@@ -1,12 +1,20 @@
 extern crate hyper;
-extern crate rotor_http;
 extern crate rotor;
+extern crate rotor_stream;
+extern crate rotor_http;
 extern crate mio;
+extern crate time;
+
 
 use std::env;
 use std::thread;
-use rotor_http::HttpServer;
-use mio::tcp::TcpListener;
+use rotor::Scope;
+use hyper::status::StatusCode::{self, NotFound};
+use hyper::header::ContentLength;
+use rotor_stream::{Deadline, Accept, Stream};
+use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
+use mio::tcp::{TcpListener, TcpStream};
+use time::Duration;
 
 
 struct Context {
@@ -23,39 +31,113 @@ impl Counter for Context {
     fn get(&self) -> usize { self.counter }
 }
 
-struct HelloWorld;
+impl rotor_http::server::Context for Context {
+    // default impl is okay
+    fn byte_timeout(&self) -> Duration {
+        Duration::seconds(1000)
+    }
+}
 
-impl<C:Counter> rotor_http::http1::Handler<C> for HelloWorld {
-    fn request(req: rotor_http::http1::Request,
-               res: &mut rotor_http::http1::ResponseBuilder,
-               ctx: &mut C)
+
+#[derive(Debug, Clone)]
+enum HelloWorld {
+    Start,
+    Hello,
+    GetNum,
+    HelloName(String),
+    PageNotFound,
+}
+
+fn send_string(res: &mut Response, data: &[u8]) {
+    res.status(hyper::status::StatusCode::Ok);
+    res.add_header(ContentLength(data.len() as u64)).unwrap();
+    res.done_headers().unwrap();
+    res.write_body(data);
+    res.done();
+}
+
+impl<C:Counter+rotor_http::server::Context> Server<C> for HelloWorld {
+    fn headers_received(_head: &Head, _scope: &mut Scope<C>)
+        -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
-        ctx.increment();
-        match req.uri {
+        Ok((HelloWorld::Start, RecvMode::Buffered(1024),
+            Deadline::now() + Duration::seconds(10)))
+    }
+    fn request_start(self, head: Head, _res: &mut Response,
+        scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        use self::HelloWorld::*;
+        scope.increment();
+        match head.uri {
             hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/" => {
-                res.set_status(hyper::status::StatusCode::Ok);
-                res.put_body("Hello World!");
+                Some(Hello)
             }
             hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/num"
             => {
-                res.set_status(hyper::status::StatusCode::Ok);
-                res.put_body(format!("This host visited {} times",
-                                     ctx.get()));
+                Some(GetNum)
             }
             hyper::uri::RequestUri::AbsolutePath(p) => {
-                res.set_status(hyper::status::StatusCode::Ok);
-                res.put_body(format!("Hello {}!", &p[1..]));
+                Some(HelloName(p[1..].to_string()))
             }
-            _ => {}  // Do nothing: not found or bad request
+            _ => {
+                Some(PageNotFound)
+            }
         }
+    }
+    fn request_received(self, _data: &[u8], res: &mut Response,
+        scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        use self::HelloWorld::*;
+        match self {
+            Hello => {
+                send_string(res, b"Hello World!");
+            }
+            GetNum => {
+                send_string(res,
+                    format!("This host has been visited {} times",
+                        scope.get())
+                    .as_bytes());
+            }
+            HelloName(name) => {
+                send_string(res, format!("Hello {}!", name).as_bytes());
+            }
+            Start => unreachable!(),
+            PageNotFound => {
+                scope.emit_error_page(NotFound, res);
+            }
+        }
+        None
+    }
+    fn request_chunk(self, _chunk: &[u8], _response: &mut Response,
+        _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unreachable!();
+    }
+
+    /// End of request body, only for Progressive requests
+    fn request_end(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unreachable!();
+    }
+
+    fn timeout(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<(Self, Deadline)>
+    {
+        unimplemented!();
+    }
+    fn wakeup(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unimplemented!();
     }
 }
 
 fn main() {
-
-
-    let lst = TcpListener::bind(
-                &"127.0.0.1:7777".parse().unwrap()).unwrap();
+    let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     let threads = env::var("THREADS").unwrap_or("2".to_string())
         .parse().unwrap();
     let mut children = Vec::new();
@@ -66,8 +148,12 @@ fn main() {
             let mut handler = rotor::Handler::new(Context {
                 counter: 0,
             }, &mut event_loop);
-            handler.add_root(&mut event_loop,
-                HttpServer::<_, HelloWorld>::new(listener));
+            let ok = handler.add_machine_with(&mut event_loop, |scope| {
+                Accept::<TcpListener, TcpStream,
+                    Stream<Context, _, Parser<HelloWorld>>>::new(
+                        listener, scope)
+            }).is_ok();
+            assert!(ok);
             event_loop.run(&mut handler).unwrap();
         }));
     }

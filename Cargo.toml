@@ -24,7 +24,8 @@ quick-error = "0.2.1"
 matches = "0.1"
 
 [dev-dependencies]
-libc = "*"
+libc = "0.1"
+net2 = "0.2"
 
 [lib]
 name = "rotor_http"
