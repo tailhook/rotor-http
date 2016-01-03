@@ -50,8 +50,8 @@ enum ResponseImpl {
     /// Nothing has been sent
     Start { version: Version, body: ResponseBody },
     /// Status line is already in the buffer
-    Headers { body: ResponseBody,
-              content_length: Option<u64>, chunked: bool },
+    Headers { body: ResponseBody, chunked: bool,
+              content_length: Option<u64> },
     ZeroBodyResponse,  // When response body is Denied
     IgnoredBody, // When response body is Ignored
     FixedSizeBody(u64),
