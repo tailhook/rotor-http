@@ -1,9 +1,18 @@
 extern crate hyper;
-extern crate rotor_http;
 extern crate rotor;
+extern crate rotor_stream;
+extern crate rotor_http;
 extern crate mio;
+extern crate time;
 
-use rotor_http::HttpServer;
+
+use rotor::{Scope, Compose2};
+use hyper::status::StatusCode::{self};
+use hyper::header::ContentLength;
+use rotor_stream::{Deadline, Accept, Stream};
+use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
+use mio::tcp::{TcpListener, TcpStream};
+use time::Duration;
 
 
 pub struct Context {
@@ -30,102 +39,133 @@ struct Incr;
 
 struct Get;
 
+impl rotor_http::server::Context for Context {
+    // default impl is okay
+}
 
-impl<C:IncrCounter> rotor_http::http1::Handler<C> for Incr {
-    fn request(req: rotor_http::http1::Request,
-               res: &mut rotor_http::http1::ResponseBuilder,
-               ctx: &mut C)
+fn send_string(res: &mut Response, data: &[u8]) {
+    res.status(hyper::status::StatusCode::Ok);
+    res.add_header(ContentLength(data.len() as u64)).unwrap();
+    res.done_headers().unwrap();
+    res.write_body(data);
+    res.done();
+}
+
+impl<C:IncrCounter+rotor_http::server::Context> Server<C> for Incr {
+    fn headers_received(_head: &Head, _scope: &mut Scope<C>)
+        -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
-        ctx.increment();
-        match req.uri {
-            hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/" => {
-                res.set_status(hyper::status::StatusCode::Ok);
-                res.put_body("Hello World!");
-            }
-            _ => {}  // Do nothing: not found or bad request
-        }
+        Ok((Incr, RecvMode::Buffered(1024),
+            Deadline::now() + Duration::seconds(10)))
+    }
+    fn request_start(self, _head: Head, _res: &mut Response,
+        scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        scope.increment();
+        Some(self)
+    }
+    fn request_received(self, _data: &[u8], res: &mut Response,
+        _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        send_string(res, b"Hello World!");
+        None
+    }
+    fn request_chunk(self, _chunk: &[u8], _response: &mut Response,
+        _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unreachable!();
+    }
+
+    /// End of request body, only for Progressive requests
+    fn request_end(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unreachable!();
+    }
+
+    fn timeout(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<(Self, Deadline)>
+    {
+        unimplemented!();
+    }
+    fn wakeup(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unimplemented!();
     }
 }
 
-impl<C:GetCounter> rotor_http::http1::Handler<C> for Get {
-    fn request(req: rotor_http::http1::Request,
-               res: &mut rotor_http::http1::ResponseBuilder,
-               ctx: &mut C)
+impl<C:GetCounter+rotor_http::server::Context> Server<C> for Get {
+    fn headers_received(_head: &Head, _scope: &mut Scope<C>)
+        -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
-        match req.uri {
-            hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/num"
-            => {
-                res.set_status(hyper::status::StatusCode::Ok);
-                res.put_body(format!("The other port visited {} times",
-                                     ctx.get()));
-            }
-            _ => {}  // Do nothing: not found or bad request
-        }
+        Ok((Get, RecvMode::Buffered(1024),
+            Deadline::now() + Duration::seconds(10)))
+    }
+    fn request_start(self, _head: Head, _res: &mut Response,
+        _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        Some(self)
+    }
+    fn request_received(self, _data: &[u8], res: &mut Response,
+        scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        send_string(res,
+            format!("This host has been visited {} times",
+                scope.get())
+            .as_bytes());
+        None
+    }
+    fn request_chunk(self, _chunk: &[u8], _response: &mut Response,
+        _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unreachable!();
+    }
+
+    /// End of request body, only for Progressive requests
+    fn request_end(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unreachable!();
+    }
+
+    fn timeout(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<(Self, Deadline)>
+    {
+        unimplemented!();
+    }
+    fn wakeup(self, _response: &mut Response, _scope: &mut Scope<C>)
+        -> Option<Self>
+    {
+        unimplemented!();
     }
 }
-
-enum Wrapper<C:IncrCounter + GetCounter> {
-    Incr(HttpServer<C, Incr>),
-    Get(HttpServer<C, Get>),
-}
-
-impl<C:IncrCounter + GetCounter> rotor::EventMachine<C> for Wrapper<C> {
-    /// Socket readiness notification
-    fn ready(self, events: mio::EventSet, context: &mut C)
-        -> rotor::Async<Self, Option<Self>>
-    {
-        match self {
-            Wrapper::Incr(m) => m.ready(events, context).wrap(Wrapper::Incr),
-            Wrapper::Get(m) => m.ready(events, context).wrap(Wrapper::Get),
-        }
-    }
-
-    /// Gives socket a chance to register in event loop
-    fn register(self, reg: &mut rotor::handler::Registrator)
-        -> rotor::Async<Self, ()>
-    {
-        match self {
-            Wrapper::Incr(m) => m.register(reg).map(Wrapper::Incr),
-            Wrapper::Get(m) => m.register(reg).map(Wrapper::Get),
-        }
-    }
-
-    /// Timeout happened
-    fn timeout(self, context: &mut C)
-        -> rotor::Async<Self, Option<Self>>
-    {
-        match self {
-            Wrapper::Incr(m) => m.timeout(context).wrap(Wrapper::Incr),
-            Wrapper::Get(m) => m.timeout(context).wrap(Wrapper::Get),
-        }
-    }
-
-    /// Message received
-    fn wakeup(self, context: &mut C)
-        -> rotor::Async<Self, Option<Self>>
-    {
-        match self {
-            Wrapper::Incr(m) => m.wakeup(context).wrap(Wrapper::Incr),
-            Wrapper::Get(m) => m.wakeup(context).wrap(Wrapper::Get),
-        }
-    }
-}
-
 
 fn main() {
+    let lst1 = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
+    let lst2 = TcpListener::bind(&"127.0.0.1:3001".parse().unwrap()).unwrap();
     let mut event_loop = mio::EventLoop::new().unwrap();
     let mut handler = rotor::Handler::new(Context {
         counter: 0,
     }, &mut event_loop);
-    handler.add_root(&mut event_loop,
-        Wrapper::Incr(HttpServer::new(
-            mio::tcp::TcpListener::bind(
-                &"127.0.0.1:8888".parse().unwrap()).unwrap(),
-            )));
-    handler.add_root(&mut event_loop,
-        Wrapper::Get(HttpServer::new(
-            mio::tcp::TcpListener::bind(
-                &"127.0.0.1:8889".parse().unwrap()).unwrap(),
-            )));
+    let ok1 = handler.add_machine_with(&mut event_loop, |scope| {
+        Accept::<TcpListener, TcpStream,
+            Stream<Context, _, Parser<Incr>>>::new(
+                lst1, scope)
+            .map(Compose2::A)
+    }).is_ok();
+    let ok2 = handler.add_machine_with(&mut event_loop, |scope| {
+        Accept::<TcpListener, TcpStream,
+            Stream<Context, _, Parser<Get>>>::new(
+                lst2, scope)
+            .map(Compose2::B)
+    }).is_ok();
+    assert!(ok1 && ok2);
     event_loop.run(&mut handler).unwrap();
 }
