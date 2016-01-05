@@ -9,3 +9,4 @@ extern crate rotor_stream;
 #[macro_use] extern crate matches;
 
 pub mod server;
+pub mod client;

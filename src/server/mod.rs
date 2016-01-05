@@ -1,3 +1,9 @@
+//! HTTP Server implementation
+//!
+//! Currently there is only HTTP/1.x implementation. We want to provide
+//! HTTP/2.0 and TLS implementation with exactly the same protocol. But
+//! it's yet unproven if it is possible.
+//!
 mod request;
 mod protocol;
 mod context;
