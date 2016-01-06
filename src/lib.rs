@@ -1,3 +1,4 @@
+extern crate ip;
 extern crate mio;
 extern crate rotor;
 extern crate hyper;

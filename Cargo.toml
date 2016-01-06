@@ -21,6 +21,7 @@ rotor = "0.4.0"
 rotor-stream = "0.3.0"
 quick-error = "0.2.1"
 matches = "0.1"
+ip = "1.0.0"
 
 [dev-dependencies]
 libc = "0.1"
