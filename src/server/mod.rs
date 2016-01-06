@@ -12,9 +12,8 @@ mod response;
 
 use hyper::method::Method::Head;
 
-use message::Message;
-
 pub use self::request::Head;
+pub use self::response::Response;
 pub use self::context::Context;
 pub use self::protocol::{RecvMode, Server};
 pub use self::parser::Parser;
@@ -38,6 +37,4 @@ pub const MAX_HEADERS_SIZE: usize = 16384;
 /// In unbuffered mode we can process chunk of unlimited size as long as
 /// request handler is able to handle it.
 pub const MAX_CHUNK_HEAD: usize = 128;
-
-pub struct Response<'a>(Message<'a>);
 

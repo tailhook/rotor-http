@@ -2,7 +2,7 @@ use netbuf::Buf;
 use hyper::status::StatusCode;
 use hyper::header::{Header, HeaderFormat};
 
-use super::{Response, Head};
+use super::{Head};
 use message::{MessageState, Message, HeaderError};
 
 
@@ -24,6 +24,8 @@ pub const NOT_IMPLEMENTED: &'static str = concat!(
     "\r\n",
     );
 
+pub struct Response<'a>(Message<'a>);
+
 impl<'a> From<Message<'a>> for Response<'a> {
     fn from(msg: Message) -> Response {
         Response(msg)
@@ -37,7 +39,7 @@ impl<'a> Response<'a> {
         use message::Body::*;
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
-        MessageState::Start {
+        MessageState::ResponseStart {
             body: if head.method == Head { Ignored } else { Normal },
             version: head.version,
         }.with(out_buf)
@@ -53,10 +55,12 @@ impl<'a> Response<'a> {
         match me {
             // If response is not even started yet, send something to make
             // debugging easier
-            Start { body: Denied, .. } | Start { body: Ignored, .. } => {
+            ResponseStart { body: Denied, .. }
+            | ResponseStart { body: Ignored, .. }
+            => {
                 buf.extend(NOT_IMPLEMENTED_HEAD.as_bytes());
             }
-            Start { body: Normal, .. } => {
+            ResponseStart { body: Normal, .. } => {
                 buf.extend(NOT_IMPLEMENTED.as_bytes());
             }
             _ => {}
