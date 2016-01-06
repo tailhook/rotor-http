@@ -1,8 +1,7 @@
 //! HTTP Server implementation
 //!
 //! Currently there is only HTTP/1.x implementation. We want to provide
-//! HTTP/2.0 and TLS implementation with exactly the same protocol. But
-//! it's yet unproven if it is possible.
+//! HTTP/2.0 and HTTPS
 //!
 mod request;
 mod protocol;
@@ -11,11 +10,9 @@ mod parser;
 mod body;
 mod response;
 
-use netbuf::Buf;
 use hyper::method::Method::Head;
-use hyper::version::HttpVersion as Version;
 
-use self::response::{NOT_IMPLEMENTED_HEAD, NOT_IMPLEMENTED};
+use message::Message;
 
 pub use self::request::Head;
 pub use self::context::Context;
@@ -42,85 +39,5 @@ pub const MAX_HEADERS_SIZE: usize = 16384;
 /// request handler is able to handle it.
 pub const MAX_CHUNK_HEAD: usize = 128;
 
+pub struct Response<'a>(Message<'a>);
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ResponseBody {
-    Normal,
-    Ignored,  // HEAD requests, 304 responses
-    Denied,  // 101, 204 responses (100 too if it is used here)
-}
-
-
-#[derive(Debug)]
-enum ResponseImpl {
-    /// Nothing has been sent
-    Start { version: Version, body: ResponseBody },
-    /// Status line is already in the buffer
-    Headers { body: ResponseBody, chunked: bool,
-              content_length: Option<u64> },
-    ZeroBodyResponse,  // When response body is Denied
-    IgnoredBody, // When response body is Ignored
-    FixedSizeBody(u64),
-    ChunkedBody,
-    Done,
-}
-
-pub struct Response<'a>(&'a mut Buf, ResponseImpl);
-
-impl ResponseImpl {
-    fn with<'x>(self, out_buf: &'x mut Buf) -> Response<'x> {
-        Response(out_buf, self)
-    }
-}
-
-impl<'a> Response<'a> {
-    fn internal(self) -> ResponseImpl {
-        self.1
-    }
-
-    /// This is used for error pages, where it's impossible to parse input
-    /// headers (i.e. get Head object needed for `Response::new`)
-    fn simple<'x>(out_buf: &'x mut Buf, is_head: bool) -> Response<'x>
-    {
-        use self::ResponseBody::*;
-        Response(out_buf, ResponseImpl::Start {
-            body: if is_head { Ignored } else { Normal },
-            // Always assume HTTP/1.0 when version is unknown
-            version: Version::Http10,
-        })
-    }
-
-    /// Creates new response by extracting needed fields from Head
-    fn new<'x>(out_buf: &'x mut Buf, head: &Head) -> Response<'x>
-    {
-        use self::ResponseBody::*;
-        // TODO(tailhook) implement Connection: Close,
-        // (including explicit one in HTTP/1.0) and maybe others
-        Response(out_buf, ResponseImpl::Start {
-            body: if head.method == Head { Ignored } else { Normal },
-            version: head.version,
-        })
-    }
-
-    /// Returns true if it's okay too proceed with keep-alive connection
-    fn finish(self) -> bool {
-        use self::ResponseImpl::*;
-        use self::ResponseBody::*;
-        if self.is_complete() {
-            return true;
-        }
-        let Response(buf, me) = self;
-        match me {
-            // If response is not even started yet, send something to make
-            // debugging easier
-            Start { body: Denied, .. } | Start { body: Ignored, .. } => {
-                buf.extend(NOT_IMPLEMENTED_HEAD.as_bytes());
-            }
-            Start { body: Normal, .. } => {
-                buf.extend(NOT_IMPLEMENTED.as_bytes());
-            }
-            _ => {}
-        }
-        return false;
-    }
-}

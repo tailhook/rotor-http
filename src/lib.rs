@@ -11,3 +11,4 @@ extern crate rotor_stream;
 
 pub mod server;
 pub mod client;
+mod message;

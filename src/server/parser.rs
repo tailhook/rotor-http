@@ -16,14 +16,15 @@ use super::protocol::{Server, RecvMode};
 use super::context::Context;
 use super::request::Head;
 use super::body::BodyKind;
-use super::ResponseImpl;
+use super::response::state;
+use message::{MessageState};
 
 
 struct ReadBody<M: Sized> {
     machine: Option<M>,
     deadline: Deadline,
     progress: BodyProgress,
-    response: ResponseImpl,
+    response: MessageState,
 }
 
 pub enum BodyProgress {
@@ -50,7 +51,7 @@ enum ParserImpl<M: Sized> {
     ReadHeaders,
     ReadingBody(ReadBody<M>),
     /// Close connection after buffer is flushed. In other cases -> Idle
-    Processing(M, ResponseImpl, Deadline),
+    Processing(M, MessageState, Deadline),
     DoneResponse,
 }
 
@@ -91,7 +92,7 @@ impl<M> Parser<M>
         match machine {
             Some(m) => {
                 Some((Parser(
-                    ParserImpl::Processing(m, response.internal(), deadline)),
+                    ParserImpl::Processing(m, state(response), deadline)),
                     E::Sleep, deadline))
             }
             None => {
@@ -206,7 +207,7 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
                 machine: m.request_start(head, &mut resp, scope),
                 deadline: dline,
                 progress: start_body(mode, body),
-                response: resp.internal(),
+                response: state(resp),
             })
         }
         Err(status) => {
@@ -419,7 +420,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             machine: m,
                             deadline: rb.deadline,
                             progress: p,
-                            response: resp.internal(),
+                            response: state(resp),
                         }).request(scope)
                     }
                     None => Parser::complete(scope, m, resp, rb.deadline)
@@ -518,7 +519,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                             machine: Some(m),
                             deadline: deadline,
                             progress: rb.progress,
-                            response: resp.internal(),
+                            response: state(resp),
                         }).request(scope)
                     }
                     None => Parser::error(scope, resp, RequestTimeout),
@@ -548,7 +549,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                     machine: m,
                     deadline: rb.deadline,
                     progress: rb.progress,
-                    response: resp.internal(),
+                    response: state(resp),
                 }).request(scope)
             }
             Processing(m, respimp, dline) => {
