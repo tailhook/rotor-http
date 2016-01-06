@@ -10,6 +10,11 @@ commands:
     container: ubuntu
     run: [cargo, build]
 
+  test: !Command
+    description: Run unit tests
+    container: ubuntu
+    run: [cargo, test]
+
 containers:
 
   ubuntu:

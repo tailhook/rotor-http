@@ -41,7 +41,7 @@ pub enum MessageState {
     ResponseStart { version: Version, body: Body },
     RequestStart,
     /// Status line is already in the buffer
-    Headers { body: Body, chunked: bool,
+    Headers { body: Body, chunked: bool, request: bool,
               content_length: Option<u64> },
     ZeroBodyMessage,  // When response body is Denied
     IgnoredBody, // When response body is Ignored
@@ -104,7 +104,7 @@ impl<'a> Message<'a> {
                 } else if body == Normal && code == NotModified {
                     body = Ignored;
                 }
-                self.1 = Headers { body: body,
+                self.1 = Headers { body: body, request: false,
                                    content_length: None, chunked: false };
             }
             ref state => {
@@ -131,7 +131,7 @@ impl<'a> Message<'a> {
                 write!(self.0, "{} {} {}\r\n", method, uri, version).unwrap();
                 // It's common to allow request body for GET, is it so
                 // expected for the HEAD too? Other methods?
-                self.1 = Headers { body: Normal,
+                self.1 = Headers { body: Normal, request: true,
                                    content_length: None, chunked: false };
             }
             ref state => {
@@ -240,20 +240,29 @@ impl<'a> Message<'a> {
                 self.1 = ZeroBodyMessage;
                 Ok(false)
             }
-            Headers { body: Normal, content_length: Some(cl), chunked: false }
+            Headers { body: Normal, content_length: Some(cl),
+                      chunked: false, request: _ }
             => {
                 self.1 = FixedSizeBody(cl);
                 Ok(true)
             }
-            Headers { body: Normal, content_length: None, chunked: true } => {
+            Headers { body: Normal, content_length: None, chunked: true,
+                      request: _ }
+            => {
                 self.1 = ChunkedBody;
                 Ok(true)
             }
-            Headers { body: Normal, content_length: Some(_), chunked: true }
+            Headers { content_length: Some(_), chunked: true, .. }
             => unreachable!(),
-            Headers { body: Normal, content_length: None, chunked: false } => {
-                Err(HeaderError::CantDetermineBodySize)
+            Headers { body: Normal, content_length: None, chunked: false,
+                      request: true }
+            => {
+                self.1 = ZeroBodyMessage;
+                Ok(false)
             }
+            Headers { body: Normal, content_length: None, chunked: false,
+                      request: false }
+            => Err(HeaderError::CantDetermineBodySize),
             ref state => {
                 panic!("Called done_headers() method on  in a state {:?}",
                        state)
@@ -357,5 +366,54 @@ impl<'a> Message<'a> {
             // Always assume HTTP/1.0 when version is unknown
             version: Version::Http10,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use netbuf::Buf;
+    use hyper::method::Method;
+    use hyper::status::StatusCode;
+    use hyper::header::ContentLength;
+    use hyper::version::HttpVersion;
+    use super::{Message, MessageState, Body};
+
+    #[test]
+    fn message_size() {
+        // Just to keep track of size of structure
+        assert_eq!(::std::mem::size_of::<MessageState>(), 24);
+    }
+
+    fn do_request<F: FnOnce(Message)>(fun: F) -> Buf {
+        let mut buf = Buf::new();
+        fun(MessageState::RequestStart.with(&mut buf));
+        return buf;
+    }
+    fn do_response10<F: FnOnce(Message)>(fun: F) -> Buf {
+        let mut buf = Buf::new();
+        fun(MessageState::ResponseStart {
+            version: HttpVersion::Http10,
+            body: Body::Normal,
+        }.with(&mut buf));
+        return buf;
+    }
+
+    #[test]
+    fn minimal_request() {
+        assert_eq!(&do_request(|mut msg| {
+            msg.request_line(Method::Get, "/", HttpVersion::Http10);
+            msg.done_headers().unwrap();
+            msg.done();
+        })[..], "GET / HTTP/1.0\r\n\r\n".as_bytes());
+    }
+
+    #[test]
+    fn minimal_response() {
+        assert_eq!(&do_response10(|mut msg| {
+            msg.response_status(StatusCode::Ok);
+            msg.add_header(ContentLength(0)).unwrap();
+            msg.done_headers().unwrap();
+            msg.done();
+        })[..], "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n".as_bytes());
     }
 }
