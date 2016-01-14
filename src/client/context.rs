@@ -1,25 +1,22 @@
-use super::{pool, RequestCreator, PrivContext};
+use std::marker::PhantomData;
+use rotor::{Peer2Socket, Peer1Socket, Scope, create_pair};
+use super::{pool, RequestCreator, PipeInit, PoolFsmInit, Response};
 
-pub struct Pool<R: RequestCreator>(pool::Pool<R>);
+/// A pool of HTTP connections
+pub struct Pool<R: RequestCreator>(Peer2Socket<pool::Pool<R>>);
 
 pub trait Context<R: RequestCreator> {
     fn get_pool<'x>(&'x mut self) -> &'x mut Pool<R>;
 }
 
 impl<R: RequestCreator> Pool<R> {
-    pub fn new() -> Pool<R> {
-        Pool(pool::Pool::new())
-    }
-}
-
-impl<R: RequestCreator> Pool<R> {
-    fn internal(&mut self) -> &mut pool::Pool<R> {
-        &mut self.0
-    }
-}
-
-impl<R:RequestCreator, T:Context<R>> PrivContext<R> for T {
-    fn pool(&mut self) -> &mut pool::Pool<R> {
-        self.get_pool().internal()
+    /// Creates a pool
+    ///
+    /// The method returns a Pool and some kind of token, that may be used
+    /// to initialize the state machine of the connection.
+    pub fn create() -> (PoolFsmInit<R>, Pool<R>)
+    {
+        let (tok1, tok2) = create_pair(pool::Pool::new());
+        (PoolFsmInit(tok1), Pool(tok2))
     }
 }

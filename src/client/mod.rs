@@ -10,11 +10,15 @@ mod context;
 mod pool;
 mod request;
 mod creator;
+mod response;
 
 pub use self::context::{Context, Pool};
 pub use self::request::{Request};
 pub use self::creator::{RequestCreator};
+pub use self::pool::{PipeInit, PoolFsm};
+pub use self::response::{Response};
 
-trait PrivContext<R: RequestCreator> {
-    fn pool(&mut self) -> &mut pool::Pool<R>;
-}
+use rotor::Peer1Socket;
+
+/// Token useed to initialize Pool state machine
+pub struct PoolFsmInit<R: RequestCreator>(Peer1Socket<pool::Pool<R>>);
