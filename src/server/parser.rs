@@ -1,7 +1,8 @@
 use std::cmp::min;
 use std::str::from_utf8;
+use std::marker::PhantomData;
 
-use netbuf::MAX_BUF_SIZE;
+use rotor_stream::MAX_BUF_SIZE;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport, Exception};
@@ -20,7 +21,7 @@ use super::response::state;
 use message::{MessageState};
 
 
-struct ReadBody<M: Sized> {
+struct ReadBody<M: Server> {
     machine: Option<M>,
     deadline: Deadline,
     progress: BodyProgress,
@@ -44,9 +45,10 @@ pub enum BodyProgress {
     ProgressiveChunked(usize, usize, u64),
 }
 
-pub struct Parser<M: Sized>(ParserImpl<M>);
+pub struct Parser<M, S>(ParserImpl<M>, PhantomData<*const S>)
+    where M: Server, S: StreamSocket;
 
-enum ParserImpl<M: Sized> {
+enum ParserImpl<M: Server> {
     Idle,
     ReadHeaders,
     ReadingBody(ReadBody<M>),
@@ -55,44 +57,40 @@ enum ParserImpl<M: Sized> {
     DoneResponse,
 }
 
-impl<M> Parser<M>
-{
-    fn flush<C>(scope: &mut Scope<C>) -> Request<Parser<M>>
-        where C: Context
+impl<M: Server, S: StreamSocket> Parser<M, S> {
+    fn flush(scope: &mut Scope<M::Context>) -> Request<Parser<M, S>>
     {
-        Some((Parser(ParserImpl::DoneResponse), E::Flush(0),
+        Some((ParserImpl::DoneResponse.wrap(), E::Flush(0),
               Deadline::now() + scope.byte_timeout()))
     }
-    fn error<'x, C>(scope: &mut Scope<C>, mut response: Response<'x>,
+    fn error<'x>(scope: &mut Scope<M::Context>, mut response: Response<'x>,
         code: StatusCode)
-        -> Request<Parser<M>>
-        where C: Context
+        -> Request<Parser<M, S>>
     {
         if !response.is_started() {
             scope.emit_error_page(code, &mut response);
         }
         response.finish();
-        Some((Parser(ParserImpl::DoneResponse), E::Flush(0),
+        Some((ParserImpl::DoneResponse.wrap(), E::Flush(0),
               Deadline::now() + scope.byte_timeout()))
     }
-    fn raw_error<'x, C, S>(scope: &mut Scope<C>,
-        transport: &mut Transport<S>, code: StatusCode)
-        -> Request<Parser<M>>
-        where C: Context,
-              S: StreamSocket
+    fn raw_error<'x>(scope: &mut Scope<M::Context>,
+        transport: &mut Transport<<Self as Protocol>::Socket>,
+        code: StatusCode)
+        -> Request<Parser<M, S>>
     {
         let resp = Response::simple(transport.output(), false);
         Parser::error(scope, resp, code)
     }
     fn complete<'x, C>(scope: &mut Scope<C>, machine: Option<M>,
         response: Response<'x>, deadline: Deadline)
-        -> Request<Parser<M>>
+        -> Request<Parser<M, S>>
         where C: Context
     {
         match machine {
             Some(m) => {
-                Some((Parser(
-                    ParserImpl::Processing(m, state(response), deadline)),
+                Some((ParserImpl::Processing(m, state(response), deadline)
+                      .wrap(),
                     E::Sleep, deadline))
             }
             None => {
@@ -105,10 +103,10 @@ impl<M> Parser<M>
     }
 }
 
-fn start_headers<C: Context, M: Sized>(scope: &mut Scope<C>)
-    -> Request<Parser<M>>
+fn start_headers<C: Context, M: Server, S: StreamSocket>(scope: &mut Scope<C>)
+    -> Request<Parser<M, S>>
 {
-    Some((Parser(ParserImpl::ReadHeaders),
+    Some((ParserImpl::ReadHeaders.wrap(),
           E::Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE),
           Deadline::now() + scope.byte_timeout()))
 }
@@ -134,11 +132,9 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
 //
 // On error returns bool, which is true if keep-alive connection can be
 // carried on.
-fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
-    scope: &mut Scope<C>) -> Result<ReadBody<M>, bool>
-    where M: Server<C>,
-          S: StreamSocket,
-          C: Context,
+fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
+    scope: &mut Scope<M::Context>) -> Result<ReadBody<M>, bool>
+    where M: Server, S: StreamSocket,
 {
     // Determines if we can keep-alive after error response.
     // We may not be able to keep keep-alive for multiple reasons:
@@ -219,10 +215,14 @@ fn parse_headers<C, M, S>(transport: &mut Transport<S>, end: usize,
     }
 }
 
-impl<M> ParserImpl<M>
+impl<M: Server> ParserImpl<M>
 {
-    fn request<C>(self, scope: &mut Scope<C>) -> Request<Parser<M>>
-        where C: Context
+    fn wrap<S: StreamSocket>(self) -> Parser<M, S>
+    {
+        Parser(self, PhantomData)
+    }
+    fn request<C, S>(self, scope: &mut Scope<C>) -> Request<Parser<M, S>>
+        where C: Context, S: StreamSocket
     {
         use rotor_stream::Expectation::*;
         use self::ParserImpl::*;
@@ -256,24 +256,23 @@ impl<M> ParserImpl<M>
         let deadline = dline.map_or_else(
             || byte_dline,
             |x| min(byte_dline, x));
-        Some((Parser(self), exp, deadline))
+        Some((self.wrap(), exp, deadline))
     }
 }
 
-impl<C, M, S> Protocol<C, S> for Parser<M>
-    where M: Server<C>,
-          S: StreamSocket,
-          C: Context,
-{
+impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
+    type Context = M::Context;
+    type Socket = S;
     type Seed = ();
-    fn create(_seed: (), _sock: &mut S, scope: &mut Scope<C>)
+    fn create(_seed: (), _sock: &mut Self::Socket,
+        scope: &mut Scope<M::Context>)
         -> Request<Self>
     {
-        Some((Parser(ParserImpl::Idle), E::Bytes(1),
+        Some((ParserImpl::Idle.wrap(), E::Bytes(1),
             Deadline::now() + scope.byte_timeout()))
     }
     fn bytes_read(self, transport: &mut Transport<S>,
-                  end: usize, scope: &mut Scope<C>)
+                  end: usize, scope: &mut Scope<M::Context>)
         -> Request<Self>
     {
         use self::ParserImpl::*;
@@ -283,7 +282,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
                 start_headers(scope)
             }
             ReadHeaders => {
-                match parse_headers::<C, M, S>(transport, end, scope) {
+                match parse_headers(transport, end, scope) {
                     Ok(body) => {
                         ReadingBody(body).request(scope)
                     }
@@ -428,12 +427,12 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             }
             // Spurious event?
             me @ DoneResponse => me.request(scope),
-            Processing(m, r, dline) => Some((Parser(Processing(m, r, dline)),
+            Processing(m, r, dline) => Some((Processing(m, r, dline).wrap(),
                                              E::Sleep, dline)),
         }
     }
     fn bytes_flushed(self, _transport: &mut Transport<S>,
-                     scope: &mut Scope<C>)
+                     scope: &mut Scope<Self::Context>)
         -> Request<Self>
     {
         match self.0 {
@@ -442,7 +441,7 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
         }
     }
     fn exception(self, transport: &mut Transport<S>, exc: Exception,
-        scope: &mut Scope<C>)
+        scope: &mut Scope<Self::Context>)
         -> Request<Self>
     {
         use self::ParserImpl::*;
@@ -501,7 +500,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             WriteError(_) => None,
         }
     }
-    fn timeout(self, transport: &mut Transport<S>, scope: &mut Scope<C>)
+    fn timeout(self, transport: &mut Transport<S>,
+        scope: &mut Scope<Self::Context>)
         -> Request<Self>
     {
         use self::ParserImpl::*;
@@ -536,7 +536,8 @@ impl<C, M, S> Protocol<C, S> for Parser<M>
             }
         }
     }
-    fn wakeup(self, transport: &mut Transport<S>, scope: &mut Scope<C>)
+    fn wakeup(self, transport: &mut Transport<S>,
+        scope: &mut Scope<Self::Context>)
         -> Request<Self>
     {
         use self::ParserImpl::*;

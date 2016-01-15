@@ -1,4 +1,4 @@
-use netbuf::Buf;
+use rotor_stream::Buf;
 use hyper::header::{Header, HeaderFormat};
 use hyper::method::Method;
 use hyper::version::HttpVersion as Version;

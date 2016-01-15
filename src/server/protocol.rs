@@ -35,7 +35,8 @@ pub enum RecvMode {
 /// A handler of server-side HTTP
 ///
 /// Used for all versions of HTTP
-pub trait Server<C: Context>: Sized {
+pub trait Server: Sized {
+    type Context: Context;
     /// Encountered when headers received
     ///
     /// Returns self, mode and timeout for reading whole request.
@@ -46,7 +47,7 @@ pub trait Server<C: Context>: Sized {
     ///
     /// In case there is Expect header, the successful (non-None) return of
     /// this handler means we shoul return `100 Expect` result
-    fn headers_received(head: &Head, scope: &mut Scope<C>)
+    fn headers_received(head: &Head, scope: &mut Scope<Self::Context>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>;
 
     /// Called immediately after `headers_received`.
@@ -58,7 +59,7 @@ pub trait Server<C: Context>: Sized {
     /// You may start building a response right here, or wait for
     /// the next event.
     fn request_start(self, head: Head, response: &mut Response,
-        scope: &mut Scope<C>)
+        scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 
     /// Called when full request is received in buffered mode
@@ -67,7 +68,7 @@ pub trait Server<C: Context>: Sized {
     /// written in Response is used and rotor-http does as much as it can
     /// to produce a valid response.
     fn request_received(self, data: &[u8], response: &mut Response,
-        scope: &mut Scope<C>)
+        scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 
     /// Called when request become invalid between `request_start()`
@@ -86,7 +87,9 @@ pub trait Server<C: Context>: Sized {
     ///
     /// It's never called on a timeout.
     // TODO(tailhook) should there be some reason?
-    fn bad_request(self, _response: &mut Response, _scope: &mut Scope<C>) {}
+    fn bad_request(self, _response: &mut Response,
+        _scope: &mut Scope<Self::Context>)
+    {}
 
     /// Received chunk of data
     ///
@@ -100,11 +103,12 @@ pub trait Server<C: Context>: Sized {
     /// 3. Currently for chunked encoding we don't merge chunks, so last
     ///    part of each chunk may be shorter as `nbytes`
     fn request_chunk(self, chunk: &[u8], response: &mut Response,
-        scope: &mut Scope<C>)
+        scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 
     /// End of request body, only for Progressive requests
-    fn request_end(self, response: &mut Response, scope: &mut Scope<C>)
+    fn request_end(self, response: &mut Response,
+        scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 
     /// Request timeout occured
@@ -121,8 +125,8 @@ pub trait Server<C: Context>: Sized {
     ///
     /// Unless you've returned the new timeout connection will be closed after
     /// the event.
-    fn timeout(self, response: &mut Response, scope: &mut Scope<C>)
+    fn timeout(self, response: &mut Response, scope: &mut Scope<Self::Context>)
         -> Option<(Self, Deadline)>;
-    fn wakeup(self, response: &mut Response, scope: &mut Scope<C>)
+    fn wakeup(self, response: &mut Response, scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 }

@@ -1,4 +1,4 @@
-use netbuf::Buf;
+use rotor_stream::Buf;
 use hyper::status::StatusCode;
 use hyper::header::{Header, HeaderFormat};
 

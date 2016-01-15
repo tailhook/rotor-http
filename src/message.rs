@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::any::Any;
 
-use netbuf::Buf;
+use rotor_stream::Buf;
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion as Version;
@@ -371,7 +371,7 @@ impl<'a> Message<'a> {
 
 #[cfg(test)]
 mod test {
-    use netbuf::Buf;
+    use rotor_stream::Buf;
     use hyper::method::Method;
     use hyper::status::StatusCode;
     use hyper::header::ContentLength;

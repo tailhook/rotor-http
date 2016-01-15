@@ -1,17 +1,17 @@
-extern crate hyper;
 extern crate rotor;
 extern crate rotor_stream;
 extern crate rotor_http;
-extern crate mio;
 extern crate time;
 
 
 use rotor::Scope;
-use hyper::status::StatusCode::{self, NotFound};
-use hyper::header::ContentLength;
+use rotor_http::status::StatusCode::{self, NotFound};
+use rotor_http::header::ContentLength;
+use rotor_http::uri::RequestUri;
 use rotor_stream::{Deadline, Accept, Stream};
 use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
-use mio::tcp::{TcpListener, TcpStream};
+use rotor_http::server::{Context as HttpContext};
+use rotor::mio::tcp::TcpListener;
 use time::Duration;
 
 
@@ -47,35 +47,36 @@ enum HelloWorld {
 }
 
 fn send_string(res: &mut Response, data: &[u8]) {
-    res.status(hyper::status::StatusCode::Ok);
+    res.status(StatusCode::Ok);
     res.add_header(ContentLength(data.len() as u64)).unwrap();
     res.done_headers().unwrap();
     res.write_body(data);
     res.done();
 }
 
-impl<C:Counter+rotor_http::server::Context> Server<C> for HelloWorld {
-    fn headers_received(_head: &Head, _scope: &mut Scope<C>)
+impl Server for HelloWorld {
+    type Context = Context;
+    fn headers_received(_head: &Head, _scope: &mut Scope<Context>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
         Ok((HelloWorld::Start, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
     }
     fn request_start(self, head: Head, _res: &mut Response,
-        scope: &mut Scope<C>)
+        scope: &mut Scope<Context>)
         -> Option<Self>
     {
         use self::HelloWorld::*;
         scope.increment();
         match head.uri {
-            hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/" => {
+            RequestUri::AbsolutePath(ref p) if &p[..] == "/" => {
                 Some(Hello)
             }
-            hyper::uri::RequestUri::AbsolutePath(ref p) if &p[..] == "/num"
+            RequestUri::AbsolutePath(ref p) if &p[..] == "/num"
             => {
                 Some(GetNum)
             }
-            hyper::uri::RequestUri::AbsolutePath(p) => {
+            RequestUri::AbsolutePath(p) => {
                 Some(HelloName(p[1..].to_string()))
             }
             _ => {
@@ -84,7 +85,7 @@ impl<C:Counter+rotor_http::server::Context> Server<C> for HelloWorld {
         }
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
-        scope: &mut Scope<C>)
+        scope: &mut Scope<Context>)
         -> Option<Self>
     {
         use self::HelloWorld::*;
@@ -109,25 +110,25 @@ impl<C:Counter+rotor_http::server::Context> Server<C> for HelloWorld {
         None
     }
     fn request_chunk(self, _chunk: &[u8], _response: &mut Response,
-        _scope: &mut Scope<C>)
+        _scope: &mut Scope<Context>)
         -> Option<Self>
     {
         unreachable!();
     }
 
     /// End of request body, only for Progressive requests
-    fn request_end(self, _response: &mut Response, _scope: &mut Scope<C>)
+    fn request_end(self, _response: &mut Response, _scope: &mut Scope<Context>)
         -> Option<Self>
     {
         unreachable!();
     }
 
-    fn timeout(self, _response: &mut Response, _scope: &mut Scope<C>)
+    fn timeout(self, _response: &mut Response, _scope: &mut Scope<Context>)
         -> Option<(Self, Deadline)>
     {
         unimplemented!();
     }
-    fn wakeup(self, _response: &mut Response, _scope: &mut Scope<C>)
+    fn wakeup(self, _response: &mut Response, _scope: &mut Scope<Context>)
         -> Option<Self>
     {
         unimplemented!();
@@ -135,14 +136,13 @@ impl<C:Counter+rotor_http::server::Context> Server<C> for HelloWorld {
 }
 
 fn main() {
-    let mut event_loop = mio::EventLoop::new().unwrap();
+    let mut event_loop = rotor::EventLoop::new().unwrap();
     let mut handler = rotor::Handler::new(Context {
         counter: 0,
     }, &mut event_loop);
     let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     let ok = handler.add_machine_with(&mut event_loop, |scope| {
-        Accept::<TcpListener, TcpStream,
-            Stream<Context, _, Parser<HelloWorld>>>::new(lst, scope)
+        Accept::<Stream<Parser<HelloWorld, _>>, _>::new(lst, scope)
     }).is_ok();
     assert!(ok);
     event_loop.run(&mut handler).unwrap();

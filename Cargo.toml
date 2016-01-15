@@ -13,12 +13,10 @@ authors = ["paul@colomiets.name"]
 [dependencies]
 hyper = "0.7"
 httparse = "1.1"
-netbuf = "0.3.1"
 log = "0.3"
 time = "0.1"
-mio = "0.5"
-rotor = "0.4.0"
-rotor-stream = "0.3.0"
+rotor = {git="git://github.com/tailhook/rotor", rev="cde4393"}
+rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="3b703b2"}
 quick-error = "0.2.1"
 matches = "0.1"
 ip = "1.0.0"
@@ -26,6 +24,7 @@ ip = "1.0.0"
 [dev-dependencies]
 libc = "0.1"
 net2 = "0.2"
+argparse = "0.2.1"
 
 [lib]
 name = "rotor_http"
