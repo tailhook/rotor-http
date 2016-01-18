@@ -1,6 +1,7 @@
 use rotor_stream::Buf;
 use hyper::status::StatusCode;
 use hyper::header::{Header, HeaderFormat};
+use hyper::method::Method;
 
 use super::{Head};
 use message::{MessageState, Message, HeaderError};
@@ -40,7 +41,7 @@ impl<'a> Response<'a> {
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
         MessageState::ResponseStart {
-            body: if head.method == Head { Ignored } else { Normal },
+            body: if head.method == Method::Head { Ignored } else { Normal },
             version: head.version,
         }.with(out_buf)
     }

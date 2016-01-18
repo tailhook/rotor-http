@@ -10,8 +10,6 @@ mod parser;
 mod body;
 mod response;
 
-use hyper::method::Method::Head;
-
 pub use self::request::Head;
 pub use self::response::Response;
 pub use self::context::Context;
