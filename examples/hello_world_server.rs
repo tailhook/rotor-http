@@ -136,14 +136,13 @@ impl Server for HelloWorld {
 }
 
 fn main() {
-    let mut event_loop = rotor::EventLoop::new().unwrap();
-    let mut handler = rotor::Handler::new(Context {
+    let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
+    let mut loop_inst = event_loop.instantiate(Context {
         counter: 0,
-    }, &mut event_loop);
+    });
     let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
-    let ok = handler.add_machine_with(&mut event_loop, |scope| {
+    loop_inst.add_machine_with(|scope| {
         Accept::<Stream<Parser<HelloWorld, _>>, _>::new(lst, scope)
-    }).is_ok();
-    assert!(ok);
-    event_loop.run(&mut handler).unwrap();
+    }).unwrap();
+    loop_inst.run().unwrap();
 }

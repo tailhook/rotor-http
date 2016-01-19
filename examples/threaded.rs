@@ -145,16 +145,16 @@ fn main() {
     for _ in 0..threads {
         let listener = lst.try_clone().unwrap();
         children.push(thread::spawn(move || {
-            let mut event_loop = rotor::EventLoop::new().unwrap();
-            let mut handler = rotor::Handler::new(Context {
+            let event_loop = rotor::Loop::new(
+                &rotor::Config::new()).unwrap();
+            let mut loop_inst = event_loop.instantiate(Context {
                 counter: 0,
-            }, &mut event_loop);
-            let ok = handler.add_machine_with(&mut event_loop, |scope| {
+            });
+            loop_inst.add_machine_with(|scope| {
                 Accept::<Stream<Parser<HelloWorld, _>>, _>::new(
                         listener, scope)
-            }).is_ok();
-            assert!(ok);
-            event_loop.run(&mut handler).unwrap();
+            }).unwrap();
+            loop_inst.run().unwrap();
         }));
     }
     for child in children {

@@ -17,7 +17,6 @@ use rotor_http::uri::RequestUri;
 use rotor_stream::{Deadline, Accept, Stream};
 use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
 use rotor_http::server::{Context as HttpContext};
-use rotor::mio::tcp::{TcpListener, TcpStream};
 use time::Duration;
 
 
@@ -159,16 +158,16 @@ fn main() {
         let listener = rotor::mio::tcp::TcpListener::from_listener(
             sock.listen(4096).unwrap(), &addr).unwrap();
         children.push(thread::spawn(move || {
-            let mut event_loop = rotor::EventLoop::new().unwrap();
-            let mut handler = rotor::Handler::new(Context {
+            let loop_creator = rotor::Loop::new(
+                &rotor::Config::new()).unwrap();
+            let mut loop_inst = loop_creator.instantiate(Context {
                 counter: 0,
-            }, &mut event_loop);
-            let ok = handler.add_machine_with(&mut event_loop, |scope| {
+            });
+            loop_inst.add_machine_with(|scope| {
                 Accept::<Stream<Parser<HelloWorld, _>>, _>::new(
                         listener, scope)
-            }).is_ok();
-            assert!(ok);
-            event_loop.run(&mut handler).unwrap();
+            }).unwrap();
+            loop_inst.run().unwrap();
         }));
     }
     for child in children {

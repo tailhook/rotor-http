@@ -9,7 +9,7 @@ use rotor_http::status::StatusCode::{self};
 use rotor_http::header::ContentLength;
 use rotor_stream::{Deadline, Accept, Stream};
 use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
-use rotor::mio::tcp::{TcpListener, TcpStream};
+use rotor::mio::tcp::{TcpListener};
 use time::Duration;
 
 
@@ -150,16 +150,15 @@ impl Server for Get {
 fn main() {
     let lst1 = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     let lst2 = TcpListener::bind(&"127.0.0.1:3001".parse().unwrap()).unwrap();
-    let mut event_loop = rotor::EventLoop::new().unwrap();
-    let mut handler = rotor::Handler::new(Context {
+    let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
+    let mut loop_inst = event_loop.instantiate(Context {
         counter: 0,
-    }, &mut event_loop);
-    let ok1 = handler.add_machine_with(&mut event_loop, |scope| {
+    });
+    loop_inst.add_machine_with(|scope| {
         Accept::<Stream<Parser<Incr, _>>, _>::new(lst1, scope).map(Compose2::A)
-    }).is_ok();
-    let ok2 = handler.add_machine_with(&mut event_loop, |scope| {
+    }).unwrap();
+    loop_inst.add_machine_with(|scope| {
         Accept::<Stream<Parser<Get, _>>, _>::new(lst2, scope).map(Compose2::B)
-    }).is_ok();
-    assert!(ok1 && ok2);
-    event_loop.run(&mut handler).unwrap();
+    }).unwrap();
+    loop_inst.run().unwrap();
 }
