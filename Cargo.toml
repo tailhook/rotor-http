@@ -15,6 +15,7 @@ hyper = "0.7"
 httparse = "1.1"
 log = "0.3"
 time = "0.1"
+void = "0.0.5"
 rotor = {git="git://github.com/tailhook/rotor", rev="4c142d4"}
 rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="2628e69"}
 quick-error = "0.2.1"

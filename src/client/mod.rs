@@ -5,20 +5,32 @@
 //! But it's yet unproven if it is possible.
 //!
 //! Also DNS resolving is not implemented yet.
+//!
 
-mod context;
+use std::marker::PhantomData;
+use std::sync::{Arc, Mutex};
+
+use rotor::EarlyScope;
+
 mod pool;
 mod request;
 mod creator;
 mod response;
+mod fsm;
 
-pub use self::context::{Context, Pool};
 pub use self::request::{Request};
 pub use self::creator::{RequestCreator};
-pub use self::pool::{PipeInit, PoolFsm};
 pub use self::response::{Response};
 
-use rotor::Peer1Socket;
+pub struct PoolFsm<R, C>(Arc<Mutex<pool::Pool<R>>>, PhantomData<*const C>)
+    where R: RequestCreator;
+pub struct Pool<R: RequestCreator>(Arc<Mutex<pool::Pool<R>>>);
 
-/// Token useed to initialize Pool state machine
-pub struct PoolFsmInit<R: RequestCreator>(Peer1Socket<pool::Pool<R>>);
+
+pub fn create_pool<R: RequestCreator, C>(scope: &mut EarlyScope)
+    -> (PoolFsm<R, C>, Pool<R>)
+{
+    let internal = pool::Pool::new(scope.notifier());
+    let arc = Arc::new(Mutex::new(internal));
+    return (PoolFsm(arc.clone(), PhantomData), Pool(arc.clone()));
+}
