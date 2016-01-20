@@ -14,23 +14,22 @@ use rotor::EarlyScope;
 
 mod pool;
 mod request;
-mod creator;
-mod response;
 mod fsm;
+mod head;
+mod protocol;
 
 pub use self::request::{Request};
-pub use self::creator::{RequestCreator};
-pub use self::response::{Response};
+pub use self::protocol::Client;
+pub use self::head::Head;
+pub use recvmode::RecvMode;
 
-pub struct PoolFsm<R, C>(Arc<Mutex<pool::Pool<R>>>, PhantomData<*const C>)
-    where R: RequestCreator;
-pub struct Pool<R: RequestCreator>(Arc<Mutex<pool::Pool<R>>>);
+pub struct PoolFsm<R: Client>(Arc<Mutex<pool::Pool<R>>>);
+pub struct Pool<R: Client>(Arc<Mutex<pool::Pool<R>>>);
 
 
-pub fn create_pool<R: RequestCreator, C>(scope: &mut EarlyScope)
-    -> (PoolFsm<R, C>, Pool<R>)
+pub fn create_pool<R: Client>(scope: &mut EarlyScope) -> (PoolFsm<R>, Pool<R>)
 {
     let internal = pool::Pool::new(scope.notifier());
     let arc = Arc::new(Mutex::new(internal));
-    return (PoolFsm(arc.clone(), PhantomData), Pool(arc.clone()));
+    return (PoolFsm(arc.clone()), Pool(arc.clone()));
 }

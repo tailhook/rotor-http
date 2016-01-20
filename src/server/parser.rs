@@ -11,14 +11,15 @@ use hyper::status::StatusCode::{self, RequestHeaderFieldsTooLarge};
 use hyper::method::Method::Head;
 use hyper::header::Expect;
 
+use recvmode::RecvMode;
+use message::{MessageState};
 use super::{MAX_HEADERS_SIZE, MAX_CHUNK_HEAD};
 use super::{Response};
-use super::protocol::{Server, RecvMode};
+use super::protocol::{Server};
 use super::context::Context;
 use super::request::Head;
 use super::body::BodyKind;
 use super::response::state;
-use message::{MessageState};
 
 
 struct ReadBody<M: Server> {
@@ -112,8 +113,8 @@ fn start_headers<C: Context, M: Server, S: StreamSocket>(scope: &mut Scope<C>)
 }
 
 fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
+    use recvmode::RecvMode::*;
     use super::body::BodyKind::*;
-    use super::protocol::RecvMode::*;
     use self::BodyProgress::*;
 
     match (mode, body) {

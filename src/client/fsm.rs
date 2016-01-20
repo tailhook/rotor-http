@@ -3,11 +3,11 @@ use std::error::Error;
 use void::{Void, unreachable};
 use rotor::{Machine, Scope, EventSet, Response};
 
-use super::{PoolFsm, RequestCreator};
+use super::{PoolFsm, Client};
 
 
-impl<C, R: RequestCreator> Machine for PoolFsm<R, C> {
-    type Context = C;
+impl<R: Client> Machine for PoolFsm<R> {
+    type Context = R::Context;
     type Seed = Void;
     fn create(seed: Self::Seed, _scope: &mut Scope<Self::Context>)
         -> Result<Self, Box<Error>>

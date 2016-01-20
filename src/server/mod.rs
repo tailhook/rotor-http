@@ -13,8 +13,9 @@ mod response;
 pub use self::request::Head;
 pub use self::response::Response;
 pub use self::context::Context;
-pub use self::protocol::{RecvMode, Server};
+pub use self::protocol::{Server};
 pub use self::parser::Parser;
+pub use recvmode::RecvMode;
 
 // TODO(tailhook) MAX_HEADERS_SIZE can be moved to Context
 // (i.e. made non-constant), but it's more of a problem for MAX_HEADERS_NUM

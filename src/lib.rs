@@ -11,7 +11,9 @@ extern crate rotor_stream;
 pub mod server;
 pub mod client;
 mod message;
+mod recvmode;
 
+pub use rotor_stream::Deadline;
 pub use hyper::status as status;
 pub use hyper::header as header;
 pub use hyper::version as version;
