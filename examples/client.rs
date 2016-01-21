@@ -2,6 +2,8 @@ extern crate rotor;
 extern crate rotor_http;
 extern crate time;
 
+use std::net::ToSocketAddrs;
+
 use rotor::{Scope};
 use rotor_http::client::{Pool, create_pool, Request, Head, Client, RecvMode};
 use rotor_http::method::Method::Get;
@@ -72,10 +74,13 @@ fn main() {
         new_pool = Some(pool);
         Ok(fsm)
     }).unwrap();
+    let pool = new_pool.unwrap();
+    pool.request_to(
+        ("google.com", 80).to_socket_addrs().unwrap().collect::<Vec<_>>()[0],
+        Req(format!("/")));
     let loop_inst = creator.instantiate(Context {
-        pool: new_pool.unwrap(),
+        pool: pool,
     });
-    //pool.request(("google.com", 80), Req(format!("/")));
     //let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     //loop_inst.add_machine_with(|scope| {
     //    Accept::<Stream<Parser<HelloWorld, _>>, _>::new(lst, scope)
