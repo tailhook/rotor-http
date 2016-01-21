@@ -3,7 +3,6 @@ extern crate rotor;
 extern crate hyper;
 extern crate httparse;
 extern crate time;
-extern crate void;
 extern crate rotor_stream;
 #[macro_use] extern crate quick_error;
 #[macro_use] extern crate matches;

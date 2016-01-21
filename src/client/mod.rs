@@ -7,7 +7,6 @@
 //! Also DNS resolving is not implemented yet.
 //!
 
-use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use rotor::EarlyScope;
@@ -18,6 +17,7 @@ mod fsm;
 mod head;
 mod protocol;
 mod api;
+mod connection;
 
 pub use self::request::{Request};
 pub use self::protocol::Client;
@@ -28,7 +28,7 @@ pub use recvmode::RecvMode;
 ///
 /// Must be used as a return value of `add_machine_with`. No direct usage
 /// of it is expected.
-pub struct PoolFsm<R: Client>(Arc<Mutex<pool::Pool<R>>>);
+pub struct PoolFsm<R: Client>(fsm::Fsm<R>);
 
 /// The connection pool
 ///
@@ -50,5 +50,5 @@ pub fn create_pool<R: Client>(scope: &mut EarlyScope) -> (PoolFsm<R>, Pool<R>)
 {
     let internal = pool::Pool::new(scope.notifier());
     let arc = Arc::new(Mutex::new(internal));
-    return (PoolFsm(arc.clone()), Pool(arc.clone()));
+    return (PoolFsm(fsm::Fsm::pool(arc.clone())), Pool(arc.clone()));
 }

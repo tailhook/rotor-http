@@ -1,4 +1,3 @@
-use hyper::status::StatusCode;
 use rotor::Scope;
 use rotor_stream::{Deadline};
 

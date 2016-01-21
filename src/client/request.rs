@@ -127,7 +127,3 @@ impl<'a> Request<'a> {
         Request(Message::simple(out_buf, is_head))
     }
 }
-
-pub fn state(resp: Request) -> MessageState {
-    resp.0.state()
-}

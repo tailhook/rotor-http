@@ -5,25 +5,36 @@ use rotor::{Notifier};
 use super::{Client};
 
 pub struct Connection<R> {
-    notifier: Notifier,
-    pending_request: Option<R>,
+    pub notifier: Notifier,
+    pub pending_request: Option<R>,
 }
 
 pub struct Chunk<R: Client> {
-    idle: Vec<Connection<R>>,
-    busy: Vec<Connection<R>>,
+    pub idle: Vec<Connection<R>>,
+    pub busy: Vec<Connection<R>>,
 }
 
 pub struct Pool<R: Client> {
-    connections: HashMap<SocketAddr, Chunk<R>>,
-    notifier: Notifier,
+    pub connections: HashMap<SocketAddr, Chunk<R>>,
+    pub insertion_queue: Vec<R>,
+    pub notifier: Notifier,
 }
 
 impl<R: Client> Pool<R> {
     pub fn new(notifier: Notifier) -> Pool<R> {
         Pool {
             connections: HashMap::new(),
+            insertion_queue: Vec::new(),
             notifier: notifier,
+        }
+    }
+}
+
+impl<R:Client> Chunk<R> {
+    pub fn new() -> Chunk<R> {
+        Chunk {
+            idle: Vec::new(),
+            busy: Vec::new(),
         }
     }
 }
