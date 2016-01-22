@@ -14,7 +14,7 @@ impl<R: Client> Pool<R> {
                 unimplemented!();
             }
             None => {
-                pool.insertion_queue.push(req);
+                pool.insertion_queue.push((addr, req));
                 pool.notifier.wakeup().unwrap();
             }
         }

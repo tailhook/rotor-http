@@ -16,7 +16,7 @@ pub struct Chunk<R: Client> {
 
 pub struct Pool<R: Client> {
     pub connections: HashMap<SocketAddr, Chunk<R>>,
-    pub insertion_queue: Vec<R>,
+    pub insertion_queue: Vec<(SocketAddr, R)>,
     pub notifier: Notifier,
 }
 
