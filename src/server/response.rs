@@ -11,17 +11,17 @@ use message::{MessageState, Message, HeaderError};
 /// anything to the buffer. In any real scenario this page must never appear.
 /// If it is, this probably means there is a bug somewhere. For example,
 /// emit_error_page has returned without creating a real error response.
-pub const NOT_IMPLEMENTED_HEAD: &'static str = concat!(
-    "HTTP/1.0 501 Not Implemented\r\n",
-    "Content-Type: text/plain\r\n",
-    "Content-Length: 22\r\n",
-    "\r\n",
-    "501 Not Implemented\r\n",
-    );
 pub const NOT_IMPLEMENTED: &'static str = concat!(
     "HTTP/1.0 501 Not Implemented\r\n",
     "Content-Type: text/plain\r\n",
-    "Content-Length: 22\r\n",
+    "Content-Length: 21\r\n",
+    "\r\n",
+    "501 Not Implemented\r\n",
+    );
+pub const NOT_IMPLEMENTED_HEAD: &'static str = concat!(
+    "HTTP/1.0 501 Not Implemented\r\n",
+    "Content-Type: text/plain\r\n",
+    "Content-Length: 21\r\n",
     "\r\n",
     );
 

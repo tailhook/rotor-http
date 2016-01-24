@@ -46,7 +46,7 @@ impl Head {
             Ok(_) => unreachable!(),
             Err(_) => {
                 // Anything to do with error?
-                // Should more precice errors be here?
+                // Should more precise errors be here?
                 return Err(BadRequest);
             }
         }

@@ -19,7 +19,7 @@ pub enum RecvMode {
     ///
     /// Note the buffer size is asserted on if it's bigger than max buffer size
     Buffered(usize),
-    /// Fetch data chunk-by-chunk
+    /// Fetch data chunk-by-chunk.
     ///
     /// The parameter denotes minimum number of bytes that may be passed
     /// to the protocol handler. This is for performance tuning (i.e. less
@@ -37,16 +37,16 @@ pub enum RecvMode {
 /// Used for all versions of HTTP
 pub trait Server: Sized {
     type Context: Context;
-    /// Encountered when headers received
+    /// Encountered when headers received.
     ///
     /// Returns self, mode and timeout for reading whole request.
     ///
-    /// This handler decides whether request is fully buffered or whether
+    /// This handler decides whether a request is fully buffered or whether
     /// we need to read request body by chunk. It's recommended to return
-    /// Buffered up to certain size, or at least for zero-length request.
+    /// Buffered up to certain size, or at least for zero-length requests.
     ///
     /// In case there is Expect header, the successful (non-None) return of
-    /// this handler means we shoul return `100 Expect` result
+    /// this handler means we should return a `100 Expect` result.
     fn headers_received(head: &Head, scope: &mut Scope<Self::Context>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>;
 
@@ -62,7 +62,7 @@ pub trait Server: Sized {
         scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 
-    /// Called when full request is received in buffered mode
+    /// Called when full request is received in buffered mode.
     ///
     /// Note that even if you return None from handler, the data already
     /// written in Response is used and rotor-http does as much as it can
@@ -111,7 +111,7 @@ pub trait Server: Sized {
         scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 
-    /// Request timeout occured
+    /// Request timeout occurred
     ///
     /// This is only called if headers are already received but state machine
     /// is not yet finished. It drops down in two cases:
