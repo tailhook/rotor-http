@@ -1,7 +1,6 @@
 use hyper::version::HttpVersion as Version;
 use hyper::status::StatusCode::{self, BadRequest};
 use hyper::method::Method;
-use hyper::uri::RequestUri;
 use hyper::header::Headers;
 use httparse;
 
@@ -14,13 +13,13 @@ use super::MAX_HEADERS_NUM;
 /// We don't have a request object because it is structured differently
 /// based on whether it is buffered or streaming, chunked or http2, etc.
 ///
-/// Note: we do our base to keep Head object same for HTTP 1-2 and HTTPS
+/// Note: we intend to keep the Head object the same for HTTP 1-2 and HTTPS
 pub struct Head {
     // TODO(tailhook) add source IP address
     pub version: Version,
     pub https: bool,
     pub method: Method,
-    pub uri: RequestUri,
+    pub path: String,
     pub headers: Headers,
 }
 
@@ -37,8 +36,7 @@ impl Head {
                              else { Version::Http10 },
                     method: try!(raw.method.unwrap().parse()
                         .map_err(|_| BadRequest)),
-                    uri: try!(raw.path.unwrap().parse()
-                        .map_err(|_| BadRequest)),
+                    path: raw.path.unwrap().to_owned(),
                     headers: try!(Headers::from_raw(raw.headers)
                         .map_err(|_| BadRequest)),
                 })

@@ -7,7 +7,6 @@ extern crate time;
 use rotor::Scope;
 use rotor_http::status::StatusCode::{self, NotFound};
 use rotor_http::header::ContentLength;
-use rotor_http::uri::RequestUri;
 use rotor_stream::{Deadline, Accept, Stream};
 use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
 use rotor_http::server::{Context as HttpContext};
@@ -68,20 +67,11 @@ impl Server for HelloWorld {
     {
         use self::HelloWorld::*;
         scope.increment();
-        match head.uri {
-            RequestUri::AbsolutePath(ref p) if &p[..] == "/" => {
-                Some(Hello)
-            }
-            RequestUri::AbsolutePath(ref p) if &p[..] == "/num"
-            => {
-                Some(GetNum)
-            }
-            RequestUri::AbsolutePath(p) => {
-                Some(HelloName(p[1..].to_string()))
-            }
-            _ => {
-                Some(PageNotFound)
-            }
+        match &head.path[..] {
+            "/" => Some(Hello),
+            "/num" => Some(GetNum),
+            p if p.starts_with("/") => Some(HelloName(p[1..].to_string())),
+            _ => Some(PageNotFound),
         }
     }
     fn request_received(self, _data: &[u8], res: &mut Response,

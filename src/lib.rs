@@ -15,4 +15,3 @@ pub use hyper::status as status;
 pub use hyper::header as header;
 pub use hyper::version as version;
 pub use hyper::method as method;
-pub use hyper::uri as uri;
