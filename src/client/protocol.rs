@@ -21,6 +21,8 @@ use super::{Head, Request};
 pub trait Client: Sized {
     type Context;
 
+    fn byte_timeout(&self) -> Option<Self>;
+
     /// Populates a request
     ///
     /// This receives a `Request` object, which is a "builder". When you
