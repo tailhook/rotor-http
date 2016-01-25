@@ -22,7 +22,7 @@ pub enum RecvMode {
     ///
     /// Note the buffer size is asserted on if it's bigger than max buffer size
     Buffered(usize),
-    /// Fetch data chunk-by-chunk
+    /// Fetch data chunk-by-chunk.
     ///
     /// The parameter denotes minimum number of bytes that may be passed
     /// to the protocol handler. This is for performance tuning (i.e. less
