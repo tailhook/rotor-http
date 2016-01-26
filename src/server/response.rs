@@ -1,9 +1,8 @@
 use rotor_stream::Buf;
 use hyper::status::StatusCode;
 use hyper::header::{Header, HeaderFormat};
-use hyper::method::Method;
+use hyper::version::HttpVersion;
 
-use super::{Head};
 use message::{MessageState, Message, HeaderError};
 
 
@@ -35,14 +34,15 @@ impl<'a> From<Message<'a>> for Response<'a> {
 
 impl<'a> Response<'a> {
     /// Creates new response message by extracting needed fields from Head
-    pub fn new<'x>(out_buf: &'x mut Buf, head: &Head) -> Response<'x>
+    pub fn new<'x>(out_buf: &'x mut Buf, version: HttpVersion,
+        is_head: bool) -> Response<'x>
     {
         use message::Body::*;
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
         MessageState::ResponseStart {
-            body: if head.method == Method::Head { Ignored } else { Normal },
-            version: head.version,
+            body: if is_head { Ignored } else { Normal },
+            version: version,
         }.with(out_buf)
     }
     /// Returns true if it's okay too proceed with keep-alive connection

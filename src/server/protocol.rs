@@ -58,7 +58,7 @@ pub trait Server: Sized {
     ///
     /// You may start building a response right here, or wait for
     /// the next event.
-    fn request_start(self, head: Head, response: &mut Response,
+    fn request_start(self, response: &mut Response,
         scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 
