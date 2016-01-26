@@ -3,7 +3,6 @@ use hyper::status::StatusCode::{self, BadRequest};
 use hyper::status::StatusCode::{LengthRequired};
 use hyper::header::{ContentLength, TransferEncoding, Connection};
 use hyper::header::{Encoding, ConnectionOption};
-use hyper::method::Method::{Get, Head};
 
 use super::request::Head;
 
@@ -28,7 +27,7 @@ impl BodyKind {
             } else {
                 Ok((Chunked))
             }
-        } else if head.method == Get || head.method == Head {
+        } else if head.method == "GET" || head.method == "HEAD" {
             Ok(Fixed(0))
         } else if let Some(conn) = head.headers.get::<Connection>() {
             if conn.iter().find(|&x| *x == ConnectionOption::Close).is_some() {

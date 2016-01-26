@@ -1,7 +1,5 @@
 use hyper::version::HttpVersion as Version;
 use hyper::status::StatusCode::{self, BadRequest};
-use hyper::method::Method;
-use hyper::uri::RequestUri;
 use hyper::header::Headers;
 use httparse;
 
@@ -15,16 +13,16 @@ use super::MAX_HEADERS_NUM;
 /// based on whether it is buffered or streaming, chunked or http2, etc.
 ///
 /// Note: we do our base to keep Head object same for HTTP 1-2 and HTTPS
-pub struct Head {
+pub struct Head<'a> {
     // TODO(tailhook) add source IP address
     pub version: Version,
     pub https: bool,
-    pub method: Method,
-    pub uri: RequestUri,
+    pub method: &'a str,
+    pub path: &'a str,
     pub headers: Headers,
 }
 
-impl Head {
+impl <'a>Head<'a> {
     pub fn parse(data: &[u8]) -> Result<Head, StatusCode> {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS_NUM];
         let mut raw = httparse::Request::new(&mut headers);
@@ -35,10 +33,8 @@ impl Head {
                     https: false,
                     version: if raw.version.unwrap() == 1 { Version::Http11 }
                              else { Version::Http10 },
-                    method: try!(raw.method.unwrap().parse()
-                        .map_err(|_| BadRequest)),
-                    uri: try!(raw.path.unwrap().parse()
-                        .map_err(|_| BadRequest)),
+                    method: raw.method.unwrap(),
+                    path: raw.path.unwrap(),
                     headers: try!(Headers::from_raw(raw.headers)
                         .map_err(|_| BadRequest)),
                 })

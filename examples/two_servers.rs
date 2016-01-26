@@ -57,7 +57,7 @@ impl Server for Incr {
         Ok((Incr, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
     }
-    fn request_start(self, _head: Head, _res: &mut Response,
+    fn request_start(self, _res: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<Self>
     {
@@ -105,7 +105,7 @@ impl Server for Get {
         Ok((Get, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
     }
-    fn request_start(self, _head: Head, _res: &mut Response,
+    fn request_start(self, _res: &mut Response,
         _scope: &mut Scope<Context>)
         -> Option<Self>
     {
