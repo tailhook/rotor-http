@@ -59,10 +59,11 @@ fn send_string(res: &mut Response, data: &[u8]) {
 
 impl Server for HelloWorld {
     type Context = Context;
-    fn headers_received(head: &Head, _scope: &mut Scope<Context>)
+    fn headers_received(head: &Head, scope: &mut Scope<Context>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
         use self::HelloWorld::*;
+        scope.increment();
         Ok((match head.path {
             "/" => Hello,
             "/num" => GetNum,
