@@ -11,6 +11,7 @@ pub mod server;
 pub mod client;
 mod message;
 mod recvmode;
+mod headers;
 
 pub use rotor_stream::Deadline;
 pub use hyper::status as status;
