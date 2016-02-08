@@ -8,8 +8,8 @@ use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport, Exception};
 use hyper::status::StatusCode::{PayloadTooLarge, BadRequest, RequestTimeout};
 use hyper::status::StatusCode::{self, RequestHeaderFieldsTooLarge};
-use hyper::method::Method::Head;
 use hyper::header::Expect;
+use hyper::version::HttpVersion as Version;
 
 use recvmode::RecvMode;
 use message::{MessageState};
@@ -20,6 +20,7 @@ use super::context::Context;
 use super::request::Head;
 use super::body::BodyKind;
 use super::response::state;
+use message::MessageState;
 
 
 struct ReadBody<M: Server> {
@@ -155,9 +156,15 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
     // Determines if we can safely send the response body
     let mut is_head = false;
 
+    let mut expect_continue = false;
+
+    let mut http_version = Version::Http10;
+
     let status = match Head::parse(&transport.input()[..end+4]) {
         Ok(head) => {
-            is_head = head.method == Head;
+            is_head = head.method == "HEAD";
+            expect_continue = head.headers.get::<Expect>() == Some(&Expect::Continue);
+            http_version = head.version;
             match M::headers_received(&head, scope) {
                 Ok((_, RecvMode::Buffered(x), _)) if x >= MAX_BUF_SIZE
                 => panic!("Can't buffer {} bytes, max {}",
@@ -178,7 +185,7 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
                                     Err(PayloadTooLarge)
                                 }
                                 _ => {
-                                    Ok((head, body, m, mode, dline))
+                                    Ok((body, m, mode, dline))
                                 }
                             }
                         }
@@ -192,19 +199,19 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
     };
     transport.input().consume(end+4);
     match status {
-        Ok((head, body, m, mode, dline)) => {
-            if head.headers.get::<Expect>() == Some(&Expect::Continue) {
+        Ok((body, m, mode, dline)) => {
+            if expect_continue {
                 // Handler has already approved request, so just push it
                 transport.output().extend(
-                    format!("{} 100 Continue\r\n\r\n", head.version)
+                    format!("{} 100 Continue\r\n\r\n", http_version)
                     .as_bytes());
             }
-            let mut resp = Response::new(transport.output(), &head);
+            let mut res = Response::new(transport.output(), http_version, is_head);
             Ok(ReadBody {
-                machine: m.request_start(head, &mut resp, scope),
+                machine: m.request_start(&mut res, scope),
                 deadline: dline,
                 progress: start_body(mode, body),
-                response: state(resp),
+                response: state(res),
             })
         }
         Err(status) => {

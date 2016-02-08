@@ -9,7 +9,6 @@ use std::thread;
 use rotor::Scope;
 use rotor_http::status::StatusCode::{self, NotFound};
 use rotor_http::header::ContentLength;
-use rotor_http::uri::RequestUri;
 use rotor_stream::{Deadline, Accept, Stream};
 use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
 use rotor_http::server::{Context as HttpContext};
@@ -41,7 +40,6 @@ impl rotor_http::server::Context for Context {
 
 #[derive(Debug, Clone)]
 enum HelloWorld {
-    Start,
     Hello,
     GetNum,
     HelloName(String),
@@ -58,33 +56,24 @@ fn send_string(res: &mut Response, data: &[u8]) {
 
 impl Server for HelloWorld {
     type Context = Context;
-    fn headers_received(_head: &Head, _scope: &mut Scope<Context>)
+    fn headers_received(head: &Head, scope: &mut Scope<Context>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>
-    {
-        Ok((HelloWorld::Start, RecvMode::Buffered(1024),
-            Deadline::now() + Duration::seconds(10)))
-    }
-    fn request_start(self, head: Head, _res: &mut Response,
-        scope: &mut Scope<Context>)
-        -> Option<Self>
     {
         use self::HelloWorld::*;
         scope.increment();
-        match head.uri {
-            RequestUri::AbsolutePath(ref p) if &p[..] == "/" => {
-                Some(Hello)
-            }
-            RequestUri::AbsolutePath(ref p) if &p[..] == "/num"
-            => {
-                Some(GetNum)
-            }
-            RequestUri::AbsolutePath(p) => {
-                Some(HelloName(p[1..].to_string()))
-            }
-            _ => {
-                Some(PageNotFound)
-            }
-        }
+        Ok((match head.path {
+            "/" => Hello,
+            "/num" => GetNum,
+            p if p.starts_with('/') => HelloName(p[1..].to_string()),
+            _ => PageNotFound
+        }, RecvMode::Buffered(1024),
+            Deadline::now() + Duration::seconds(10)))
+    }
+    fn request_start(self, _res: &mut Response,
+        _scope: &mut Scope<Context>)
+        -> Option<Self>
+    {
+        Some(self)
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
         scope: &mut Scope<Context>)
@@ -104,7 +93,6 @@ impl Server for HelloWorld {
             HelloName(name) => {
                 send_string(res, format!("Hello {}!", name).as_bytes());
             }
-            Start => unreachable!(),
             PageNotFound => {
                 scope.emit_error_page(NotFound, res);
             }
