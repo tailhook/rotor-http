@@ -1,8 +1,5 @@
-use hyper::version::HttpVersion::Http10;
 use hyper::status::StatusCode::{self, BadRequest};
-use hyper::status::StatusCode::{LengthRequired};
-use hyper::header::{ContentLength, TransferEncoding, Connection};
-use hyper::header::{Encoding, ConnectionOption};
+use hyper::header::{ContentLength, TransferEncoding, Encoding};
 
 use super::request::Head;
 
@@ -12,33 +9,40 @@ pub enum BodyKind {
     Fixed(u64),
     Upgrade,
     Chunked,
-    Eof,
 }
 
 impl BodyKind {
+    /// Implements the body length algorithm for requests:
+    /// http://httpwg.github.io/specs/rfc7230.html#message.body.length
+    ///
+    /// The length of a request body is determined by one of the following
+    /// (in order of precedence):
+    ///
+    /// 1. If the request contains a valid `Transfer-Encoding` header
+    ///    with `chunked` as the last encoding the request is chunked
+    ///    (3rd option in RFC).
+    /// 2. If the request contains a valid `Content-Length` header
+    ///    the request has the given length in octets
+    ///    (5th option in RFC).
+    /// 3. If neither `Transfer-Encoding` nor `Content-Length` are
+    ///    present the request has an empty body
+    ///    (6th option in RFC).
+    /// 4. In all other cases the request is a bad request.
     pub fn parse(head: &Head) -> Result<BodyKind, StatusCode> {
         use self::BodyKind::*;
-        if let Some(&ContentLength(x)) = head.headers.get::<ContentLength>() {
-            Ok((Fixed(x)))
-        } else if let Some(items) = head.headers.get::<TransferEncoding>() {
-            // TODO(tailhook) find out whether transfer encoding can be empty
-            if &items[..] != [Encoding::Chunked] {
-                Err(BadRequest)
-            } else {
-                Ok((Chunked))
+        if head.headers.has::<TransferEncoding>() {
+            if let Some(items) = head.headers.get::<TransferEncoding>() {
+                if items.last() == Some(&Encoding::Chunked) {
+                    return Ok(Chunked);
+                }
             }
-        } else if head.method == "GET" || head.method == "HEAD" {
-            Ok(Fixed(0))
-        } else if let Some(conn) = head.headers.get::<Connection>() {
-            if conn.iter().find(|&x| *x == ConnectionOption::Close).is_some() {
-                Ok(Eof)
-            } else {
-                Err(LengthRequired)
-            }
-        } else if head.version == Http10 {
-            Ok(Eof)
-        } else {
-            Err(LengthRequired)
-        }
+        } else if head.headers.has::<ContentLength>() {
+            if let Some(&ContentLength(x)) = head.headers.get::<ContentLength>() {
+               return Ok(Fixed(x));
+           }
+       } else {
+           return Ok(Fixed(0));
+       }
+       return Err(BadRequest);
     }
 }
