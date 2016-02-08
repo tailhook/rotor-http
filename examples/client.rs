@@ -1,5 +1,6 @@
 extern crate rotor;
 extern crate rotor_http;
+extern crate rotor_tools;
 extern crate time;
 
 use std::net::ToSocketAddrs;
@@ -68,13 +69,9 @@ impl Client for Req {
 
 fn main() {
     let mut creator = rotor::Loop::new(&rotor::Config::new()).unwrap();
-    let mut new_pool = None;
-    creator.add_machine_with(|scope| {
-        let (fsm, pool) = create_pool(scope);
-        new_pool = Some(pool);
-        Ok(fsm)
+    let pool = creator.add_and_fetch(|scope| {
+        create_pool(scope)
     }).unwrap();
-    let pool = new_pool.unwrap();
     pool.request_to(
         ("google.com", 80).to_socket_addrs().unwrap().collect::<Vec<_>>()[0],
         Req(format!("/")));
