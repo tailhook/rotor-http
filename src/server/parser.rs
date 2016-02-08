@@ -122,10 +122,8 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
         // The size of Fixed(x) is checked in parse_headers
         (Buffered(_), Fixed(y)) => BufferFixed(y as usize),
         (Buffered(x), Chunked) => BufferChunked(x, 0, 0),
-        (Buffered(x), Eof) => BufferEOF(x),
         (Progressive(x), Fixed(y)) => ProgressiveFixed(x, y),
         (Progressive(x), Chunked) => ProgressiveChunked(x, 0, 0),
-        (Progressive(x), Eof) => ProgressiveEOF(x),
         (_, Upgrade) => unimplemented!(),
     }
 }
