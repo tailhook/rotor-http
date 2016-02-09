@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use std::str::from_utf8;
+use std::cmp::min;
 
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
@@ -8,7 +9,7 @@ use rotor_stream::Buf;
 use hyper::version::HttpVersion as Version;
 use httparse;
 
-use super::{MAX_HEADERS_SIZE, MAX_HEADERS_NUM};
+use super::{MAX_HEADERS_SIZE, MAX_HEADERS_NUM, MAX_CHUNK_HEAD};
 use super::{Client, Context};
 use super::head::Head;
 use super::request::{Request, state};
@@ -140,7 +141,7 @@ fn parse_headers<M>(buffer: &mut Buf, end: usize,
             let mut raw = httparse::Response::new(&mut headers);
             match raw.parse(&buffer[..end+4]) {
                 Ok(httparse::Status::Complete(x)) => {
-                    assert!(x == end);
+                    assert!(x == end+4);
                     let ver = raw.version.unwrap();
                     let code = raw.code.unwrap();
                     (ver, code, raw.reason.unwrap())
@@ -183,6 +184,68 @@ fn parse_headers<M>(buffer: &mut Buf, end: usize,
     Ok(resp)
 }
 
+impl<M: Client, S: StreamSocket> Parser<M, S> {
+    fn finish(req: Request, scope: &mut Scope<M::Context>)
+        -> Task<Parser<M, S>>
+    {
+        if req.is_complete() {
+            return ParserImpl::Idle.request(scope);
+        } else {
+            // Response is done before request is sent fully, let's close
+            // the connectoin
+            return None;
+        }
+    }
+}
+
+impl<M: Client> ParserImpl<M> {
+    fn wrap<S: StreamSocket>(self) -> Parser<M, S>
+    {
+        Parser(self, PhantomData)
+    }
+    fn request<C, S>(self, scope: &mut Scope<C>) -> Task<Parser<M, S>>
+        where C: Context, S: StreamSocket
+    {
+        use rotor_stream::Expectation::*;
+        use self::ParserImpl::*;
+        use self::BodyProgress::*;
+        let (exp, dline) = match self {
+            WriteRequest(..) => (E::Flush(0),
+                                 Some(Deadline::now() + scope.byte_timeout())),
+            ReadHeaders {..} => (
+                        E::Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE),
+                        Some(Deadline::now() + scope.byte_timeout())),
+            Response { ref progress, ref deadline, .. } => {
+                let exp = match *progress {
+                    BufferFixed(x) => Bytes(x),
+                    BufferEOF(x) => Bytes(x),
+                    BufferChunked(_, off, 0)
+                    => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
+                    BufferChunked(_, off, y) => Bytes(off + y),
+                    ProgressiveFixed(hint, left)
+                    => Bytes(min(hint as u64, left) as usize),
+                    ProgressiveEOF(hint) => Bytes(hint),
+                    ProgressiveChunked(_, off, 0)
+                    => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
+                    ProgressiveChunked(hint, off, left)
+                    => Bytes(min(hint as u64, off as u64 +left) as usize)
+                };
+                (exp, Some(*deadline))
+            }
+            Idle => {
+                return Some((self.wrap(), Sleep,
+                    Deadline::now() + scope.idle_timeout()));
+            }
+        };
+
+        let byte_dline = Deadline::now() + scope.byte_timeout();
+        let deadline = dline.map_or_else(
+            || byte_dline,
+            |x| min(byte_dline, x));
+        Some((self.wrap(), exp, deadline))
+    }
+}
+
 impl<M, S> Protocol for Parser<M, S>
     where M: Client, S: StreamSocket
 {
@@ -193,7 +256,7 @@ impl<M, S> Protocol for Parser<M, S>
         scope: &mut Scope<Self::Context>)
         -> Task<Self>
     {
-        Some((Parser(ParserImpl::WriteRequest(seed), PhantomData),
+        Some((ParserImpl::WriteRequest(seed).wrap(),
             E::Flush(0), // Become writable
             Deadline::now() + scope.byte_timeout()))
 
@@ -203,6 +266,7 @@ impl<M, S> Protocol for Parser<M, S>
         -> Task<Self>
     {
         use self::ParserImpl::*;
+        use self::BodyProgress::*;
         match self.0 {
             WriteRequest(m) => unreachable!(),
             ReadHeaders { machine, request, is_head } => {
@@ -211,15 +275,130 @@ impl<M, S> Protocol for Parser<M, S>
                 let hdr = parse_headers(inb, end, machine,
                     request.with(outb), is_head, scope);
                 match hdr {
-                    Ok(me) => unimplemented!(), //Parser(me, PhantomData).request(),
+                    Ok(me) => me.request(scope),
                     Err(()) => None, // Close the connection
                 }
             }
             Response { progress, machine, deadline, request }  => {
-                unimplemented!();
+                let (inp, out) = transport.buffers();
+                let mut req = request.with(out);
+                let (m, progress) = match progress {
+                    BufferFixed(x) => {
+                        machine.response_received(
+                                  &inp[..x], &mut req, scope);
+                        inp.consume(x);
+                        return Parser::finish(req, scope);
+                    }
+                    BufferEOF(_) => unreachable!(),
+                    BufferChunked(limit, off, 0) => {
+                        let clen_end = inp[off..end].iter()
+                            .position(|&x| x == b';')
+                            .map(|x| x + off).unwrap_or(end);
+                        let val_opt = from_utf8(&inp[off..clen_end]).ok()
+                            .and_then(|x| u64::from_str_radix(x, 16).ok());
+                        match val_opt {
+                            Some(0) => {
+                                inp.remove_range(off..end+2);
+                                let m = machine.response_received(
+                                            &inp[..off], &mut req, scope);
+                                inp.consume(off);
+                                return Parser::finish(req, scope);
+                            }
+                            Some(chunk_len) => {
+                                if off as u64 + chunk_len > limit as u64 {
+                                    inp.consume(end+2);
+                                    machine.bad_response(scope);
+                                    return None;
+                                }
+                                inp.remove_range(off..end+2);
+                                (Some(machine),
+                                 BufferChunked(limit, off, chunk_len as usize))
+                            }
+                            None => {
+                                inp.consume(end+2);
+                                machine.bad_response(scope);
+                                return None;
+                            }
+                        }
+                    }
+                    BufferChunked(limit, off, bytes) => {
+                        debug_assert!(bytes == end);
+                        (Some(machine),
+                         BufferChunked(limit, off+bytes, 0))
+                    }
+                    ProgressiveFixed(hint, mut left) => {
+                        let real_bytes = min(inp.len() as u64, left) as usize;
+                        let m = machine.response_chunk(
+                                    &inp[..real_bytes], &mut req, scope);
+                        inp.consume(real_bytes);
+                        left -= real_bytes as u64;
+                        if left == 0 {
+                            m.map(|x| x.response_end(&mut req, scope));
+                            return Parser::finish(req, scope);
+                        } else {
+                            (m, ProgressiveFixed(hint, left))
+                        }
+                    }
+                    ProgressiveEOF(hint) => {
+                        let ln = inp.len();
+                        let m = machine.response_chunk(
+                                    &inp[..ln], &mut req, scope);
+                        (m, ProgressiveEOF(hint))
+                    }
+                    ProgressiveChunked(hint, off, 0) => {
+                        let clen_end = inp[off..end].iter()
+                            .position(|&x| x == b';')
+                            .map(|x| x + off).unwrap_or(end);
+                        let val_opt = from_utf8(&inp[off..clen_end]).ok()
+                            .and_then(|x| u64::from_str_radix(x, 16).ok());
+                        match val_opt {
+                            Some(0) => {
+                                inp.remove_range(off..end+2);
+                                let m = machine.response_received(
+                                            &inp[..off], &mut req, scope);
+                                inp.consume(off);
+                                return Parser::finish(req, scope);
+                            }
+                            Some(chunk_len) => {
+                                inp.remove_range(off..end+2);
+                                (Some(machine),
+                                 ProgressiveChunked(hint, off, chunk_len))
+                            }
+                            None => {
+                                inp.consume(end+2);
+                                machine.bad_response(scope);
+                                return None;
+                            }
+                        }
+                    }
+                    ProgressiveChunked(hint, off, mut left) => {
+                        let ln = min(off as u64 + left, inp.len() as u64) as usize;
+                        left -= (ln - off) as u64;
+                        if ln < hint {
+                            (Some(machine),
+                             ProgressiveChunked(hint, ln, left))
+                        } else {
+                            let m = machine.response_chunk(&inp[..ln],
+                                                &mut req, scope);
+                            inp.consume(ln);
+                            (m, ProgressiveChunked(hint, 0, left))
+                        }
+                    }
+                };
+                match m {
+                    None => None,
+                    Some(m) => {
+                        Response {
+                            machine: m,
+                            deadline: deadline,
+                            progress: progress,
+                            request: state(req),
+                        }.request(scope)
+                    }
+                }
             }
             Idle => {
-                Some((Parser(Idle, PhantomData),
+                Some((Idle.wrap(),
                       E::Sleep, Deadline::now() + scope.idle_timeout()))
             }
         }

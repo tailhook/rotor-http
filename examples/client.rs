@@ -2,6 +2,8 @@ extern crate rotor;
 extern crate rotor_http;
 extern crate time;
 
+use std::io::stdout;
+use std::io::Write;
 use std::net::ToSocketAddrs;
 
 use rotor::{Scope};
@@ -29,13 +31,24 @@ impl Client for Req {
         scope: &mut Scope<Self::Context>)
         -> Option<(Self, RecvMode, Deadline)>
     {
+        println!("----- Headers -----");
+        println!("Status: {} {}", head.code, head.reason);
+        for header in head.headers {
+            println!("{}: {}", header.name,
+                String::from_utf8_lossy(header.value));
+        }
         Some((self,  RecvMode::Buffered(16386), Deadline::now() +
             time::Duration::seconds(1000)))
     }
     fn response_received(self, data: &[u8], request: &mut Request,
         scope: &mut Scope<Self::Context>)
     {
-        unreachable!();
+        println!("----- Response -----");
+        stdout().write_all(data).unwrap();
+        if data.last() != Some(&b'\n') {
+            println!("");
+        }
+        scope.shutdown_loop();
     }
     fn response_chunk(self, chunk: &[u8], request: &mut Request,
         scope: &mut Scope<Self::Context>)
@@ -46,7 +59,7 @@ impl Client for Req {
     fn response_end(self, request: &mut Request,
         scope: &mut Scope<Self::Context>)
     {
-        scope.shutdown_loop();
+        unreachable!();
     }
     fn timeout(self, request: &mut Request, scope: &mut Scope<Self::Context>)
         -> Option<(Self, Deadline)>

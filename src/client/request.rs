@@ -31,9 +31,7 @@ impl<'a> Request<'a> {
     /// When request line is already written. It's expected that your request
     /// handler state machine will never call the method twice.
     pub fn start(&mut self, method: Method, uri: &str, version: Version) {
-        if method == Method::Head {
-            self.1 = Some(true);
-        }
+        self.1 = Some(method == Method::Head);
         self.0.request_line(method, uri, version);
     }
     /// Add header to response
