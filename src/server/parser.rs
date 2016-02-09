@@ -20,7 +20,6 @@ use super::context::Context;
 use super::request::Head;
 use super::body::BodyKind;
 use super::response::state;
-use message::MessageState;
 
 
 struct ReadBody<M: Server> {

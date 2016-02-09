@@ -6,11 +6,11 @@ use hyper::version::HttpVersion as Version;
 use message::{MessageState, Message, HeaderError};
 
 
-pub struct Request<'a>(Message<'a>);
+pub struct Request<'a>(Message<'a>, pub Option<bool>);
 
 impl<'a> From<Message<'a>> for Request<'a> {
     fn from(msg: Message) -> Request {
-        Request(msg)
+        Request(msg, None)
     }
 }
 
@@ -31,7 +31,10 @@ impl<'a> Request<'a> {
     /// When request line is already written. It's expected that your request
     /// handler state machine will never call the method twice.
     pub fn start(&mut self, method: Method, uri: &str, version: Version) {
-        self.0.request_line(method, uri, version)
+        if method == Method::Head {
+            self.1 = Some(true);
+        }
+        self.0.request_line(method, uri, version);
     }
     /// Add header to response
     ///
@@ -119,12 +122,6 @@ impl<'a> Request<'a> {
     /// are not written yet
     pub fn done(&mut self) {
         self.0.done()
-    }
-    /// This is used for error pages, where it's impossible to parse input
-    /// headers (i.e. get Head object needed for `Message::new`)
-    pub fn simple<'x>(out_buf: &'x mut Buf, is_head: bool) -> Request<'x>
-    {
-        Request(Message::simple(out_buf, is_head))
     }
 }
 

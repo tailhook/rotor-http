@@ -1,19 +1,19 @@
 extern crate rotor;
 extern crate rotor_http;
-extern crate rotor_tools;
 extern crate time;
 
 use std::net::ToSocketAddrs;
 
 use rotor::{Scope};
-use rotor_http::client::{Pool, create_pool, Request, Head, Client, RecvMode};
+use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
+use rotor_http::client::{Context as HttpCtx};
 use rotor_http::method::Method::Get;
 use rotor_http::version::HttpVersion::Http11;
 use rotor_http::Deadline;
 
-struct Context {
-    pool: Pool<Req>,
-}
+struct Context;
+
+impl HttpCtx for Context {}
 
 struct Req(String);
 
@@ -25,7 +25,7 @@ impl Client for Req {
         req.done();
         Some(self)
     }
-    fn headers_received(self, head: &Head, request: &mut Request,
+    fn headers_received(self, head: Head, request: &mut Request,
         scope: &mut Scope<Self::Context>)
         -> Option<(Self, RecvMode, Deadline)>
     {
@@ -34,12 +34,6 @@ impl Client for Req {
     }
     fn response_received(self, data: &[u8], request: &mut Request,
         scope: &mut Scope<Self::Context>)
-    {
-        unreachable!();
-    }
-    fn response_start(self, head: Head, request: &mut Request,
-        scope: &mut Scope<Self::Context>)
-        -> Option<Self>
     {
         unreachable!();
     }
@@ -52,7 +46,7 @@ impl Client for Req {
     fn response_end(self, request: &mut Request,
         scope: &mut Scope<Self::Context>)
     {
-        unreachable!();
+        scope.shutdown_loop();
     }
     fn timeout(self, request: &mut Request, scope: &mut Scope<Self::Context>)
         -> Option<(Self, Deadline)>
@@ -68,19 +62,13 @@ impl Client for Req {
 
 
 fn main() {
-    let mut creator = rotor::Loop::new(&rotor::Config::new()).unwrap();
-    let pool = creator.add_and_fetch(|scope| {
-        create_pool(scope)
+    let creator = rotor::Loop::new(&rotor::Config::new()).unwrap();
+    let mut loop_inst = creator.instantiate(Context);
+    loop_inst.add_machine_with(|scope| {
+        connect_tcp(scope,
+            &("google.com", 80).to_socket_addrs()
+                .unwrap().collect::<Vec<_>>()[0],
+            Req(format!("/")))
     }).unwrap();
-    pool.request_to(
-        ("google.com", 80).to_socket_addrs().unwrap().collect::<Vec<_>>()[0],
-        Req(format!("/")));
-    let loop_inst = creator.instantiate(Context {
-        pool: pool,
-    });
-    //let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
-    //loop_inst.add_machine_with(|scope| {
-    //    Accept::<Stream<Parser<HelloWorld, _>>, _>::new(lst, scope)
-    //}).unwrap();
     loop_inst.run().unwrap();
 }

@@ -1,5 +1,5 @@
 use hyper::status::StatusCode::{self, BadRequest};
-use hyper::header::{ContentLength, TransferEncoding, Encoding};
+use hyper::header::{ContentLength as ContentLen, TransferEncoding, Encoding};
 
 use super::request::Head;
 
@@ -30,19 +30,18 @@ impl BodyKind {
     /// 4. In all other cases the request is a bad request.
     pub fn parse(head: &Head) -> Result<BodyKind, StatusCode> {
         use self::BodyKind::*;
-        if head.headers.has::<TransferEncoding>() {
-            if let Some(items) = head.headers.get::<TransferEncoding>() {
-                if items.last() == Some(&Encoding::Chunked) {
-                    return Ok(Chunked);
-                }
+        if let Some(items) = head.headers.get::<TransferEncoding>() {
+            // TODO(tailhook) add Connection: close to headers if headers
+            // have Content-Length too
+            if items.last() == Some(&Encoding::Chunked) {
+                Ok(Chunked)
+            } else {
+                Err(BadRequest)
             }
-        } else if head.headers.has::<ContentLength>() {
-            if let Some(&ContentLength(x)) = head.headers.get::<ContentLength>() {
-               return Ok(Fixed(x));
-           }
-       } else {
-           return Ok(Fixed(0));
-       }
-       return Err(BadRequest);
+        } else if let Some(&ContentLen(x)) = head.headers.get::<ContentLen>() {
+            Ok(Fixed(x))
+        } else {
+            Ok(Fixed(0))
+        }
     }
 }

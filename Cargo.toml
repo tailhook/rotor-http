@@ -17,8 +17,7 @@ log = "0.3"
 time = "0.1"
 void = "0.0.5"
 rotor = "0.5.0"
-rotor-tools = "0.2.0"
-rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="dc94cb9"}
+rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="8bd697e"}
 quick-error = "0.2.1"
 matches = "0.1"
 ip = "1.0.0"

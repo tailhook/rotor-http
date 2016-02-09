@@ -2,7 +2,7 @@ use rotor::Scope;
 use rotor_stream::{Deadline};
 
 use recvmode::RecvMode;
-use super::{Head, Request};
+use super::{Head, Request, Context};
 
 
 /// A handler of client-side HTTP
@@ -18,10 +18,14 @@ use super::{Head, Request};
 /// out of sync behavior (which is enforced by rust type system so should
 /// never happen, unless there is a bug in rotor-http), otherwise we may
 /// have a cache poisoning security issue.
+///
+/// Another property of this state machine is that when any event handler
+/// before `request_end()` returns None, the connection is closed (because we
+/// don't know whether response is valid and if it's too long to wait it's
+/// response). So in case you need to discard the response and it's more cheap
+/// than reopening a connection, you must read and ignore it yourself.
 pub trait Client: Sized {
-    type Context;
-
-    fn byte_timeout(&self) -> Option<Self>;
+    type Context: Context;
 
     /// Populates a request
     ///
@@ -44,23 +48,12 @@ pub trait Client: Sized {
     /// we need to read response body by chunk. It's recommended to return
     /// Buffered up to certain size, or at least for zero-length response.
     ///
-    /// In case there is Expect header, the successful (non-None) return of
-    /// this handler means we shoul return `100 Expect` result
-    fn headers_received(self, head: &Head, request: &mut Request,
-        scope: &mut Scope<Self::Context>)
-        -> Option<(Self, RecvMode, Deadline)>;
-
-    /// Called immediately after `headers_received`.
-    ///
     /// Note that `head` is passed here once, and forgotten by the
     /// protocol. If you need it later it's your responsibility to store it
     /// somewhere.
-    ///
-    /// You may start building a response right here, or wait for
-    /// the next event.
-    fn response_start(self, head: Head, request: &mut Request,
+    fn headers_received(self, head: Head, request: &mut Request,
         scope: &mut Scope<Self::Context>)
-        -> Option<Self>;
+        -> Option<(Self, RecvMode, Deadline)>;
 
     /// Called when full response is received in buffered mode
     ///
