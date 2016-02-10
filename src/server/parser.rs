@@ -613,3 +613,70 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::io::{self, Read, Write};
+    use rotor::mio::{Evented, Token, Selector};
+    use rotor::{Scope, EventSet, PollOpt};
+    use rotor_stream::Deadline;
+    use super::Parser;
+    use super::super::{Server, Head, Response, RecvMode};
+    use hyper::status::StatusCode;
+
+    struct Context;
+    struct Proto;
+    struct MockStream;
+
+    impl super::super::Context for Context {}
+
+    impl Server for Proto {
+        type Context = Context;
+        fn headers_received(_head: Head, _response: &mut Response,
+            _scope: &mut Scope<Self::Context>)
+            -> Result<(Self, RecvMode, Deadline), StatusCode>
+        { unimplemented!(); }
+        fn request_received(self, _data: &[u8], _response: &mut Response,
+            _scope: &mut Scope<Self::Context>) -> Option<Self>
+        { unimplemented!(); }
+        fn request_chunk(self, _chunk: &[u8], _response: &mut Response,
+            _scope: &mut Scope<Self::Context>) -> Option<Self>
+        { unimplemented!(); }
+        fn request_end(self, _response: &mut Response,
+            _scope: &mut Scope<Self::Context>) -> Option<Self>
+        { unimplemented!(); }
+        fn timeout(self, _response: &mut Response,
+            _scope: &mut Scope<Self::Context>) -> Option<(Self, Deadline)>
+        { unimplemented!(); }
+        fn wakeup(self, _response: &mut Response,
+            _scope: &mut Scope<Self::Context>) -> Option<Self>
+        { unimplemented!(); }
+    }
+
+    impl Read for MockStream {
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize>
+        { unimplemented!() }
+    }
+    impl Write for MockStream {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize>
+        { unimplemented!() }
+        fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+    impl Evented for MockStream {
+        fn register(&self, _selector: &mut Selector,
+            _token: Token, _interest: EventSet, _opts: PollOpt)
+            -> io::Result<()>
+        { unimplemented!() }
+        fn reregister(&self, _selector: &mut Selector, _token: Token,
+            _interest: EventSet, _opts: PollOpt) -> io::Result<()>
+        { unimplemented!() }
+        fn deregister(&self, _selector: &mut Selector) -> io::Result<()>
+        { unimplemented!() }
+    }
+
+    #[test]
+    fn parser_size() {
+        // Just to keep track of size of structure
+        assert_eq!(::std::mem::size_of::<Parser<Proto, MockStream>>(), 88);
+    }
+}
