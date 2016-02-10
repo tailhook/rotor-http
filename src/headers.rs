@@ -72,6 +72,11 @@ pub fn is_close(val: &[u8]) -> bool {
             return false;
         }
     }
+    for &ch in iter {
+        if !matches!(ch, b'\r' | b'\n' | b' ' | b'\t') {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -99,6 +104,11 @@ pub fn is_chunked(val: &[u8]) -> bool {
             return false;
         }
     }
+    for &ch in iter {
+        if !matches!(ch, b'\r' | b'\n' | b' ' | b'\t') {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -123,6 +133,11 @@ pub fn is_continue(val: &[u8]) -> bool {
     }
     for (idx, ch) in iter.by_ref().take(11).enumerate() {
         if b"00-continue"[idx] != ch.to_ascii_lowercase() {
+            return false;
+        }
+    }
+    for &ch in iter {
+        if !matches!(ch, b'\r' | b'\n' | b' ' | b'\t') {
             return false;
         }
     }
@@ -157,6 +172,14 @@ mod test {
         assert!(is_connection("CONNECTION"));
         assert!(is_connection("ConneCTION"));
         assert!(is_connection("connection"));
+    }
+
+    #[test]
+    fn test_expect() {
+        assert!(is_expect("Expect"));
+        assert!(is_expect("EXPECT"));
+        assert!(is_expect("expect"));
+        assert!(is_expect("ExpECT"));
     }
 
     #[test]
