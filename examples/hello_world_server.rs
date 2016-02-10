@@ -1,5 +1,4 @@
 extern crate rotor;
-extern crate rotor_stream;
 extern crate rotor_http;
 extern crate time;
 
@@ -7,9 +6,9 @@ extern crate time;
 use rotor::Scope;
 use rotor_http::status::StatusCode::{self, NotFound};
 use rotor_http::header::ContentLength;
-use rotor_stream::{Deadline, Accept, Stream};
-use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
+use rotor_http::server::{RecvMode, Server, Head, Response};
 use rotor_http::server::{Context as HttpContext};
+use rotor_http::{Deadline, ServerFsm};
 use rotor::mio::tcp::TcpListener;
 use time::Duration;
 
@@ -125,7 +124,7 @@ fn main() {
     });
     let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     loop_inst.add_machine_with(|scope| {
-        Accept::<Stream<Parser<HelloWorld, _>>, _>::new(lst, scope)
+        ServerFsm::<HelloWorld, _>::new(lst, scope)
     }).unwrap();
     loop_inst.run().unwrap();
 }

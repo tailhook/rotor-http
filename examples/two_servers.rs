@@ -1,14 +1,13 @@
 extern crate rotor;
-extern crate rotor_stream;
 extern crate rotor_http;
 extern crate time;
 
 
 use rotor::{Scope, Compose2};
+use rotor_http::{Deadline, ServerFsm};
 use rotor_http::status::StatusCode::{self};
 use rotor_http::header::ContentLength;
-use rotor_stream::{Deadline, Accept, Stream};
-use rotor_http::server::{RecvMode, Server, Head, Response, Parser};
+use rotor_http::server::{RecvMode, Server, Head, Response};
 use rotor::mio::tcp::{TcpListener};
 use time::Duration;
 
@@ -145,10 +144,10 @@ fn main() {
         counter: 0,
     });
     loop_inst.add_machine_with(|scope| {
-        Accept::<Stream<Parser<Incr, _>>, _>::new(lst1, scope).map(Compose2::A)
+        ServerFsm::<Incr, _>::new(lst1, scope).map(Compose2::A)
     }).unwrap();
     loop_inst.add_machine_with(|scope| {
-        Accept::<Stream<Parser<Get, _>>, _>::new(lst2, scope).map(Compose2::B)
+        ServerFsm::<Get, _>::new(lst2, scope).map(Compose2::B)
     }).unwrap();
     loop_inst.run().unwrap();
 }
