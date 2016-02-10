@@ -21,22 +21,21 @@ pub trait Server: Sized {
     /// we need to read request body by chunk. It's recommended to return
     /// Buffered up to certain size, or at least for zero-length requests.
     ///
+    /// You may start building a response right here, or wait for
+    /// the next event.
+    ///
     /// In case there is Expect header, the successful (non-None) return of
-    /// this handler means we should return a `100 Expect` result.
-    fn headers_received(head: &Head, scope: &mut Scope<Self::Context>)
-        -> Result<(Self, RecvMode, Deadline), StatusCode>;
-
-    /// Called immediately after `headers_received`.
+    /// this handler means we should return a `100 Expect` result. But if you
+    /// have started building response right here, we skip expect header, as
+    /// normal response code is good enough for browser. (Are there ugly
+    /// proxies that propagate 100 Expect but does buffer response headers?)
     ///
     /// Note that `head` is passed here once, and forgotten by the
     /// protocol. If you need it later it's your responsibility to store it
     /// somewhere.
-    ///
-    /// You may start building a response right here, or wait for
-    /// the next event.
-    fn request_start(self, response: &mut Response,
+    fn headers_received(head: Head, response: &mut Response,
         scope: &mut Scope<Self::Context>)
-        -> Option<Self>;
+        -> Result<(Self, RecvMode, Deadline), StatusCode>;
 
     /// Called when full request is received in buffered mode.
     ///

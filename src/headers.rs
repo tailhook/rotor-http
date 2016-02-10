@@ -1,6 +1,5 @@
 use std::ascii::AsciiExt;
 
-#[inline(always)]
 pub fn is_transfer_encoding(val: &str) -> bool {
     if val.len() != "transfer-encoding".len() {
         return false;
@@ -13,7 +12,6 @@ pub fn is_transfer_encoding(val: &str) -> bool {
     return true;
 }
 
-#[inline(always)]
 pub fn is_content_length(val: &str) -> bool {
     if val.len() != "content-length".len() {
         return false;
@@ -26,7 +24,6 @@ pub fn is_content_length(val: &str) -> bool {
     return true;
 }
 
-#[inline(always)]
 pub fn is_connection(val: &str) -> bool {
     if val.len() != "connection".len() {
         return false;
@@ -39,7 +36,18 @@ pub fn is_connection(val: &str) -> bool {
     return true;
 }
 
-#[inline(always)]
+pub fn is_expect(val: &str) -> bool {
+    if val.len() != "expect".len() {
+        return false;
+    }
+    for (idx, ch) in val.bytes().enumerate() {
+        if b"expect"[idx] != ch.to_ascii_lowercase() {
+            return false;
+        }
+    }
+    return true;
+}
+
 // header value is byte sequence
 // we need case insensitive comparison and strip out of the whitespace
 pub fn is_close(val: &[u8]) -> bool {
@@ -67,7 +75,6 @@ pub fn is_close(val: &[u8]) -> bool {
     return true;
 }
 
-#[inline(always)]
 // header value is byte sequence
 // we need case insensitive comparison and strip out of the whitespace
 pub fn is_chunked(val: &[u8]) -> bool {
@@ -95,10 +102,38 @@ pub fn is_chunked(val: &[u8]) -> bool {
     return true;
 }
 
+// header value is byte sequence
+// we need case insensitive comparison and strip out of the whitespace
+pub fn is_continue(val: &[u8]) -> bool {
+    if val.len() < "100-continue".len() {
+        return false;
+    }
+    let mut iter = val.iter();
+    for (idx, &ch) in iter.by_ref().enumerate() {
+        match ch {
+            b'\r' | b'\n' | b' ' | b'\t' => continue,
+            b'1' => {
+                if idx + "100-continue".len() > val.len() {
+                    return false;
+                }
+                break;
+            }
+            _ => return false,
+        }
+    }
+    for (idx, ch) in iter.by_ref().take(11).enumerate() {
+        if b"00-continue"[idx] != ch.to_ascii_lowercase() {
+            return false;
+        }
+    }
+    return true;
+}
+
 #[cfg(test)]
 mod test {
     use super::{is_content_length, is_transfer_encoding, is_connection};
-    use super::{is_chunked, is_close};
+    use super::{is_expect};
+    use super::{is_chunked, is_close, is_continue};
 
     #[test]
     fn test_content_len() {
@@ -133,6 +168,8 @@ mod test {
         assert!(is_chunked(b"   CHUNKED"));
         assert!(is_chunked(b"   CHUNKED  "));
         assert!(is_chunked(b"chunked  "));
+        assert!(is_chunked(b"   CHUNKED"));
+        assert!(!is_chunked(b"   CHUNKED 1 "));
     }
 
     #[test]
@@ -143,7 +180,20 @@ mod test {
         assert!(is_close(b"CLOSE"));
         assert!(is_close(b" CLOSE"));
         assert!(is_close(b"   close   "));
-        assert!(is_close(b"Close   "));
+        assert!(!is_close(b"Close  1 "));
+        assert!(!is_close(b" xclose   "));
+    }
+
+    #[test]
+    fn test_continue() {
+        assert!(is_continue(b"100-continue"));
+        assert!(is_continue(b"100-Continue"));
+        assert!(is_continue(b"100-conTINUE"));
+        assert!(is_continue(b"100-CONTINUE"));
+        assert!(is_continue(b"  100-CONTINUE"));
+        assert!(is_continue(b"   100-continue   "));
+        assert!(!is_continue(b"100-continue y  "));
+        assert!(!is_continue(b"100-coztinue   "));
     }
 }
 

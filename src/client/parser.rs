@@ -14,7 +14,7 @@ use super::{Client, Context};
 use super::head::Head;
 use super::request::{Request, state};
 use super::head::BodyKind;
-use message::{MessageState, Message};
+use message::{MessageState};
 use recvmode::RecvMode;
 use headers;
 
@@ -56,7 +56,7 @@ enum ParserImpl<M: Client> {
 }
 
 fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
-    -> Result<(BodyKind, usize, bool), ()>
+    -> Result<(BodyKind, bool), ()>
 {
     /// Implements the body length algorithm for requests:
     /// http://httpwg.github.io/specs/rfc7230.html#message.body.length
@@ -69,23 +69,20 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     /// 4. Else Eof
     use super::head::BodyKind::*;
     let mut has_content_length = false;
-    let mut header_iter = headers.iter().enumerate();
     let mut close = false;
     if is_head || (code > 100 && code < 200) || code == 204 || code == 304 {
-        for (idx, header) in header_iter {
+        for header in headers.iter() {
             // TODO(tailhook) check for transfer encoding and content-length
             if headers::is_connection(header.name) {
                 if header.value.split(|&x| x == b',').any(headers::is_close) {
                     close = true;
                 }
-            } else if header.name == "" {
-                return Ok((Fixed(0), idx, close));
             }
         }
-        return Ok((Fixed(0), headers.len(), close))
+        return Ok((Fixed(0), close))
     }
     let mut result = BodyKind::Eof;
-    for (idx, header) in header_iter {
+    for header in headers.iter() {
         if headers::is_transfer_encoding(header.name) {
             if let Some(enc) = header.value.split(|&x| x == b',').last() {
                 if headers::is_chunked(enc) {
@@ -102,18 +99,21 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
                 return Err(());
             }
             has_content_length = true;
-            let s = try!(from_utf8(header.value).map_err(|_| ()));
-            let len = try!(s.parse().map_err(|_| ()));
-            result = Fixed(len);
+            if result != Chunked {
+                let s = try!(from_utf8(header.value).map_err(|_| ()));
+                let len = try!(s.parse().map_err(|_| ()));
+                result = Fixed(len);
+            } else {
+                // tralsfer-encoding has preference and don't allow keep-alive
+                close = true;
+            }
         } else if headers::is_connection(header.name) {
             if header.value.split(|&x| x == b',').any(headers::is_close) {
                 close = true;
             }
-        } else if header.name == "" {
-            return Ok((result, idx, close))
         }
     }
-    return Ok((result, headers.len(), close))
+    return Ok((result, close))
 }
 fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
     use recvmode::RecvMode::*;
@@ -124,9 +124,10 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
         // The size of Fixed(x) is checked in parse_headers
         (Buffered(_), Fixed(y)) => BufferFixed(y as usize),
         (Buffered(x), Chunked) => BufferChunked(x, 0, 0),
+        (Buffered(x), Eof) => BufferEOF(x),
         (Progressive(x), Fixed(y)) => ProgressiveFixed(x, y),
         (Progressive(x), Chunked) => ProgressiveChunked(x, 0, 0),
-        (_, Upgrade) => unimplemented!(),
+        (Progressive(x), Eof) => ProgressiveEOF(x),
     }
 }
 
@@ -137,14 +138,14 @@ fn parse_headers<M>(buffer: &mut Buf, end: usize,
 {
     let resp = {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS_NUM];
-        let (ver, code, reason) = {
+        let (ver, code, reason, headers) = {
             let mut raw = httparse::Response::new(&mut headers);
             match raw.parse(&buffer[..end+4]) {
                 Ok(httparse::Status::Complete(x)) => {
                     assert!(x == end+4);
                     let ver = raw.version.unwrap();
                     let code = raw.code.unwrap();
-                    (ver, code, raw.reason.unwrap())
+                    (ver, code, raw.reason.unwrap(), raw.headers)
                 }
                 Ok(_) => unreachable!(),
                 Err(_) => {
@@ -154,14 +155,14 @@ fn parse_headers<M>(buffer: &mut Buf, end: usize,
                 }
             }
         };
-        let (body, num_headers, close) = try!(scan_headers(
+        let (body, close) = try!(scan_headers(
             is_head, code, &headers));
         let head = Head {
             version: if ver == 1
                 { Version::Http11 } else { Version::Http10 },
             code: code,
             reason: reason,
-            headers: &headers[..num_headers],
+            headers: headers,
             body_kind: body,
             // For HTTP/1.0 we could implement Connection: Keep-Alive
             // but hopefully it's rare enough to ignore nowadays
@@ -252,7 +253,7 @@ impl<M, S> Protocol for Parser<M, S>
     type Context = M::Context;
     type Socket = S;
     type Seed = M;
-    fn create(seed: Self::Seed, sock: &mut Self::Socket,
+    fn create(seed: Self::Seed, _sock: &mut Self::Socket,
         scope: &mut Scope<Self::Context>)
         -> Task<Self>
     {
@@ -268,7 +269,7 @@ impl<M, S> Protocol for Parser<M, S>
         use self::ParserImpl::*;
         use self::BodyProgress::*;
         match self.0 {
-            WriteRequest(m) => unreachable!(),
+            WriteRequest(_m) => unreachable!(),
             ReadHeaders { machine, request, is_head } => {
                 let (inb, outb) = transport.buffers();
                 let is_head = is_head.unwrap();
@@ -299,8 +300,8 @@ impl<M, S> Protocol for Parser<M, S>
                         match val_opt {
                             Some(0) => {
                                 inp.remove_range(off..end+2);
-                                let m = machine.response_received(
-                                            &inp[..off], &mut req, scope);
+                                machine.response_received(
+                                    &inp[..off], &mut req, scope);
                                 inp.consume(off);
                                 return Parser::finish(req, scope);
                             }
@@ -354,8 +355,8 @@ impl<M, S> Protocol for Parser<M, S>
                         match val_opt {
                             Some(0) => {
                                 inp.remove_range(off..end+2);
-                                let m = machine.response_received(
-                                            &inp[..off], &mut req, scope);
+                                machine.response_received(
+                                    &inp[..off], &mut req, scope);
                                 inp.consume(off);
                                 return Parser::finish(req, scope);
                             }
@@ -434,14 +435,14 @@ impl<M, S> Protocol for Parser<M, S>
             }
         }
     }
-    fn timeout(self, transport: &mut Transport<Self::Socket>,
-        scope: &mut Scope<Self::Context>)
+    fn timeout(self, _transport: &mut Transport<Self::Socket>,
+        _scope: &mut Scope<Self::Context>)
         -> Task<Self>
     {
         unimplemented!();
     }
-    fn wakeup(self, transport: &mut Transport<Self::Socket>,
-        scope: &mut Scope<Self::Context>)
+    fn wakeup(self, _transport: &mut Transport<Self::Socket>,
+        _scope: &mut Scope<Self::Context>)
         -> Task<Self>
     {
         unimplemented!();

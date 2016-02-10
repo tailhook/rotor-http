@@ -8,18 +8,15 @@
 //!
 
 use std::error::Error;
-use std::sync::{Arc, Mutex};
 use std::net::SocketAddr;
 
 use rotor::{Scope};
 use rotor::mio::tcp::TcpStream;
-use rotor_stream::{Stream, StreamSocket};
+use rotor_stream::{Stream};
 
-mod pool;
 mod request;
 mod head;
 mod protocol;
-mod connection;
 mod parser;
 mod context;
 
