@@ -59,7 +59,8 @@ fn send_string(res: &mut Response, data: &[u8]) {
 
 impl Server for HelloWorld {
     type Context = Context;
-    fn headers_received(head: &Head, scope: &mut Scope<Context>)
+    fn headers_received(head: Head, _res: &mut Response,
+        scope: &mut Scope<Context>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
         use self::HelloWorld::*;
@@ -71,12 +72,6 @@ impl Server for HelloWorld {
             _ => PageNotFound
         }, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
-    }
-    fn request_start(self, _res: &mut Response,
-        _scope: &mut Scope<Context>)
-        -> Option<Self>
-    {
-        Some(self)
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
         scope: &mut Scope<Context>)

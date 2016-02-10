@@ -51,18 +51,13 @@ fn send_string(res: &mut Response, data: &[u8]) {
 
 impl Server for Incr {
     type Context = Context;
-    fn headers_received(_head: &Head, _scope: &mut Scope<Context>)
+    fn headers_received(_head: Head, _res: &mut Response,
+        scope: &mut Scope<Context>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
+        scope.increment();
         Ok((Incr, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
-    }
-    fn request_start(self, _res: &mut Response,
-        scope: &mut Scope<Context>)
-        -> Option<Self>
-    {
-        scope.increment();
-        Some(self)
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
         _scope: &mut Scope<Context>)
@@ -99,17 +94,12 @@ impl Server for Incr {
 
 impl Server for Get {
     type Context = Context;
-    fn headers_received(_head: &Head, _scope: &mut Scope<Context>)
+    fn headers_received(_head: Head, _res: &mut Response,
+        _scope: &mut Scope<Context>)
         -> Result<(Self, RecvMode, Deadline), StatusCode>
     {
         Ok((Get, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
-    }
-    fn request_start(self, _res: &mut Response,
-        _scope: &mut Scope<Context>)
-        -> Option<Self>
-    {
-        Some(self)
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
         scope: &mut Scope<Context>)

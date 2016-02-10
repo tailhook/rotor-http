@@ -27,8 +27,8 @@ impl Client for Req {
         req.done();
         Some(self)
     }
-    fn headers_received(self, head: Head, request: &mut Request,
-        scope: &mut Scope<Self::Context>)
+    fn headers_received(self, head: Head, _request: &mut Request,
+        _scope: &mut Scope<Self::Context>)
         -> Option<(Self, RecvMode, Deadline)>
     {
         println!("----- Headers -----");
@@ -40,7 +40,7 @@ impl Client for Req {
         Some((self,  RecvMode::Buffered(16386), Deadline::now() +
             time::Duration::seconds(1000)))
     }
-    fn response_received(self, data: &[u8], request: &mut Request,
+    fn response_received(self, data: &[u8], _request: &mut Request,
         scope: &mut Scope<Self::Context>)
     {
         println!("----- Response -----");
@@ -50,23 +50,23 @@ impl Client for Req {
         }
         scope.shutdown_loop();
     }
-    fn response_chunk(self, chunk: &[u8], request: &mut Request,
-        scope: &mut Scope<Self::Context>)
+    fn response_chunk(self, _chunk: &[u8], _request: &mut Request,
+        _scope: &mut Scope<Self::Context>)
         -> Option<Self>
     {
         unreachable!();
     }
-    fn response_end(self, request: &mut Request,
-        scope: &mut Scope<Self::Context>)
+    fn response_end(self, _request: &mut Request,
+        _scope: &mut Scope<Self::Context>)
     {
         unreachable!();
     }
-    fn timeout(self, request: &mut Request, scope: &mut Scope<Self::Context>)
+    fn timeout(self, _request: &mut Request, _scope: &mut Scope<Self::Context>)
         -> Option<(Self, Deadline)>
     {
         unreachable!();
     }
-    fn wakeup(self, request: &mut Request, scope: &mut Scope<Self::Context>)
+    fn wakeup(self, _request: &mut Request, _scope: &mut Scope<Self::Context>)
         -> Option<Self>
     {
         unimplemented!();
