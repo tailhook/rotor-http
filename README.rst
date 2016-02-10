@@ -2,7 +2,8 @@
 Rotor HTTP
 ==========
 
-:Status: Proof of Concept
+:Status: alpha
+:Documentation: http://tailhook.github.io/rotor-http/
 
 
 The HTTP implementation based on mio_ and rotor_.
