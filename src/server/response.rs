@@ -35,7 +35,7 @@ impl<'a> From<Message<'a>> for Response<'a> {
 impl<'a> Response<'a> {
     /// Creates new response message by extracting needed fields from Head
     pub fn new<'x>(out_buf: &'x mut Buf, version: HttpVersion,
-        is_head: bool) -> Response<'x>
+        is_head: bool, do_close: bool) -> Response<'x>
     {
         use message::Body::*;
         // TODO(tailhook) implement Connection: Close,
@@ -43,6 +43,7 @@ impl<'a> Response<'a> {
         MessageState::ResponseStart {
             body: if is_head { Ignored } else { Normal },
             version: version,
+            close: do_close || version == HttpVersion::Http10,
         }.with(out_buf)
     }
     /// Returns true if it's okay too proceed with keep-alive connection
@@ -169,12 +170,6 @@ impl<'a> Response<'a> {
     /// are not written yet
     pub fn done(&mut self) {
         self.0.done()
-    }
-    /// This is used for error pages, where it's impossible to parse input
-    /// headers (i.e. get Head object needed for `Message::new`)
-    pub fn simple<'x>(out_buf: &'x mut Buf, is_head: bool) -> Response<'x>
-    {
-        Response(Message::simple(out_buf, is_head))
     }
 }
 

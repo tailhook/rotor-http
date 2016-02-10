@@ -27,8 +27,9 @@ use super::response::state;
 struct ReadBody<M: Server> {
     machine: Option<M>,
     deadline: Deadline,
-    progress: BodyProgress,
     response: MessageState,
+    progress: BodyProgress,
+    connection_close: bool,
 }
 
 pub enum BodyProgress {
@@ -52,7 +53,7 @@ enum ParserImpl<M: Server> {
     ReadHeaders,
     ReadingBody(ReadBody<M>),
     /// Close connection after buffer is flushed. In other cases -> Idle
-    Processing(M, MessageState, Deadline),
+    Processing(M, MessageState, bool, Deadline),
     DoneResponse,
 }
 
@@ -78,17 +79,18 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
         code: StatusCode)
         -> Request<Parser<M, S>>
     {
-        let resp = Response::simple(transport.output(), false);
+        let resp = Response::new(transport.output(),
+            Version::Http10, false, true);
         Parser::error(scope, resp, code)
     }
-    fn complete<'x, C>(scope: &mut Scope<C>, machine: Option<M>,
-        response: Response<'x>, deadline: Deadline)
+    fn complete<'x>(scope: &mut Scope<M::Context>, machine: Option<M>,
+        response: Response<'x>, connection_close: bool, deadline: Deadline)
         -> Request<Parser<M, S>>
-        where C: Context
     {
         match machine {
             Some(m) => {
-                Some((ParserImpl::Processing(m, state(response), deadline)
+                Some((ParserImpl::Processing(m, state(response),
+                        connection_close, deadline)
                       .wrap(),
                     E::Sleep, deadline))
             }
@@ -96,7 +98,11 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
                 // TODO(tailhook) probably we should do something better than
                 // an assert?
                 assert!(response.is_complete());
-                ParserImpl::Idle.request(scope)
+                if connection_close {
+                    Parser::flush(scope)
+                } else {
+                    ParserImpl::Idle.request(scope)
+                }
             }
         }
     }
@@ -189,7 +195,7 @@ fn scan_headers(version: Version, headers: &[httparse::Header])
 
 enum HeaderResult<M: Server> {
     Okay(ReadBody<M>),
-    NormError(bool, StatusCode),
+    NormError(bool, Version, StatusCode),
     FatalError(StatusCode),
     ForceClose,
 }
@@ -240,7 +246,7 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
             body_kind: body,
         };
         let (head_result, state) = {
-            let mut res = Response::new(output, version, is_head);
+            let mut res = Response::new(output, version, is_head, close);
             (M::headers_received(head, &mut res, scope),
              state(res))
         };
@@ -261,6 +267,7 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
                     deadline: dline,
                     progress: start_body(mode, body),
                     response: state,
+                    connection_close: close,
                 })
             }
             (Err(status), _) => {
@@ -271,7 +278,7 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
                 } else if close || body != BodyKind::Fixed(0) {
                     FatalError(status)
                 } else {
-                    NormError(is_head, status)
+                    NormError(is_head, version, status)
                 }
             }
         }
@@ -350,9 +357,9 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                     Okay(body) => {
                         ReadingBody(body).request(scope)
                     }
-                    NormError(is_head, status) => {
-                        let mut resp = Response::simple(
-                            transport.output(), is_head);
+                    NormError(is_head, version, status) => {
+                        let mut resp = Response::new(
+                            transport.output(), version, is_head, false);
                         scope.emit_error_page(status, &mut resp);
                         if resp.finish() {
                             Idle.request(scope)
@@ -363,8 +370,8 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                     FatalError(status) => {
                         // TODO(tailhook) force Connection: close on the
                         // response
-                        let mut resp = Response::simple(
-                            transport.output(), false);
+                        let mut resp = Response::new(
+                            transport.output(), Version::Http10, false, true);
                         scope.emit_error_page(status, &mut resp);
                         Parser::flush(scope)
                     }
@@ -489,15 +496,18 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                             deadline: rb.deadline,
                             progress: p,
                             response: state(resp),
+                            connection_close: rb.connection_close,
                         }).request(scope)
                     }
-                    None => Parser::complete(scope, m, resp, rb.deadline)
+                    None => Parser::complete(scope, m, resp,
+                        rb.connection_close, rb.deadline)
                 }
             }
             // Spurious event?
             me @ DoneResponse => me.request(scope),
-            Processing(m, r, dline) => Some((Processing(m, r, dline).wrap(),
-                                             E::Sleep, dline)),
+            Processing(m, r, c, dline) => {
+                Some((Processing(m, r, c, dline).wrap(), E::Sleep, dline))
+            }
         }
     }
     fn bytes_flushed(self, _transport: &mut Transport<S>,
@@ -572,16 +582,17 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                             deadline: deadline,
                             progress: rb.progress,
                             response: state(resp),
+                            connection_close: rb.connection_close,
                         }).request(scope)
                     }
                     None => Parser::error(scope, resp, RequestTimeout),
                 }
             }
-            Processing(m, respimp, _) => {
+            Processing(m, respimp, close, _) => {
                 let mut resp = respimp.with(transport.output());
                 match m.timeout(&mut resp, scope) {
                     Some((m, dline)) => {
-                        Parser::complete(scope, Some(m), resp, dline)
+                        Parser::complete(scope, Some(m), resp, close, dline)
                     }
                     None => Parser::error(scope, resp, RequestTimeout),
                 }
@@ -603,12 +614,13 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                     deadline: rb.deadline,
                     progress: rb.progress,
                     response: state(resp),
+                    connection_close: rb.connection_close,
                 }).request(scope)
             }
-            Processing(m, respimp, dline) => {
+            Processing(m, respimp, close, dline) => {
                 let mut resp = respimp.with(transport.output());
                 let mres = m.wakeup(&mut resp, scope);
-                Parser::complete(scope, mres, resp, dline)
+                Parser::complete(scope, mres, resp, close, dline)
             }
         }
     }
@@ -625,7 +637,7 @@ mod test {
     use hyper::status::StatusCode;
 
     struct Context;
-    struct Proto;
+    struct Proto(usize);
     struct MockStream;
 
     impl super::super::Context for Context {}
@@ -677,6 +689,6 @@ mod test {
     #[test]
     fn parser_size() {
         // Just to keep track of size of structure
-        assert_eq!(::std::mem::size_of::<Parser<Proto, MockStream>>(), 88);
+        assert_eq!(::std::mem::size_of::<Parser<Proto, MockStream>>(), 104);
     }
 }
