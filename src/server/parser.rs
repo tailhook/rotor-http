@@ -1,8 +1,10 @@
+use std::any::Any;
 use std::io::Write;
 use std::cmp::min;
 use std::str::from_utf8;
 use std::marker::PhantomData;
 
+use rotor::mio::tcp::TcpStream;
 use rotor_stream::MAX_BUF_SIZE;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
@@ -209,6 +211,8 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
     where M: Server, S: StreamSocket,
 {
     use self::HeaderResult::*;
+    let client = Any::downcast_ref::<TcpStream>(transport.socket())
+        .and_then(|x| x.peer_addr().ok());
     let result = {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS_NUM];
         let (input, output) = transport.buffers();
@@ -238,9 +242,10 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
             }
         };
         let head = Head {
+            client: client,
             version: version,
-            https: false,
             method: method,
+            scheme: "http",
             path: path,
             headers: headers,
             body_kind: body,
