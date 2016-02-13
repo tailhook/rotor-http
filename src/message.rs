@@ -3,7 +3,7 @@ use std::ascii::AsciiExt;
 
 use rotor_stream::Buf;
 
-use hyper::version::HttpVersion as Version;
+use Version;
 
 quick_error! {
     #[derive(Debug)]
@@ -413,9 +413,8 @@ impl<'a> Message<'a> {
 #[cfg(test)]
 mod test {
     use rotor_stream::Buf;
-
-    use hyper::version::HttpVersion;
     use super::{Message, MessageState, Body};
+    use Version;
 
     #[test]
     fn message_size() {
@@ -431,7 +430,7 @@ mod test {
     fn do_response10<F: FnOnce(Message)>(fun: F) -> Buf {
         let mut buf = Buf::new();
         fun(MessageState::ResponseStart {
-            version: HttpVersion::Http10,
+            version: Version::Http10,
             body: Body::Normal,
             close: false,
         }.with(&mut buf));
@@ -440,7 +439,7 @@ mod test {
     fn do_response11<F: FnOnce(Message)>(close: bool, fun: F) -> Buf {
         let mut buf = Buf::new();
         fun(MessageState::ResponseStart {
-            version: HttpVersion::Http11,
+            version: Version::Http11,
             body: Body::Normal,
             close: close,
         }.with(&mut buf));
@@ -450,7 +449,7 @@ mod test {
     #[test]
     fn minimal_request() {
         assert_eq!(&do_request(|mut msg| {
-            msg.request_line("GET", "/", HttpVersion::Http10);
+            msg.request_line("GET", "/", Version::Http10);
             msg.done_headers().unwrap();
             msg.done();
         })[..], "GET / HTTP/1.0\r\n\r\n".as_bytes());

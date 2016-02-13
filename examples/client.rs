@@ -9,7 +9,7 @@ use std::net::ToSocketAddrs;
 use rotor::{Scope};
 use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
 use rotor_http::client::{Context as HttpCtx};
-use rotor_http::version::HttpVersion::Http11;
+use rotor_http::Version::Http11;
 use rotor_http::Deadline;
 
 struct Context;

@@ -1,7 +1,7 @@
 use rotor_stream::Buf;
-use hyper::version::HttpVersion as Version;
 
 use message::{MessageState, Message, HeaderError};
+use Version;
 
 
 pub struct Request<'a>(Message<'a>, pub Option<bool>);

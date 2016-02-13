@@ -6,7 +6,6 @@ use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request as Task, Transport};
 use rotor_stream::Buf;
-use hyper::version::HttpVersion as Version;
 use httparse;
 
 use super::{MAX_HEADERS_SIZE, MAX_HEADERS_NUM, MAX_CHUNK_HEAD};
@@ -17,6 +16,7 @@ use super::head::BodyKind;
 use message::{MessageState};
 use recvmode::RecvMode;
 use headers;
+use Version;
 
 
 pub enum BodyProgress {
