@@ -1,5 +1,4 @@
 use rotor_stream::Buf;
-use hyper::method::Method;
 use hyper::version::HttpVersion as Version;
 
 use message::{MessageState, Message, HeaderError};
@@ -29,9 +28,9 @@ impl<'a> Request<'a> {
     ///
     /// When request line is already written. It's expected that your request
     /// handler state machine will never call the method twice.
-    pub fn start(&mut self, method: Method, uri: &str, version: Version) {
-        self.1 = Some(method == Method::Head);
-        self.0.request_line(method, uri, version);
+    pub fn start(&mut self, method: &str, path: &str, version: Version) {
+        self.1 = Some(method == "HEAD");
+        self.0.request_line(method, path, version);
     }
     /// Add header to message
     ///
