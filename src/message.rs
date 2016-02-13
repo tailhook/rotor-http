@@ -2,7 +2,6 @@ use std::io::Write;
 use std::ascii::AsciiExt;
 
 use rotor_stream::Buf;
-use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion as Version;
 
@@ -126,13 +125,13 @@ impl<'a> Message<'a> {
     ///
     /// When request line is already written. It's expected that your request
     /// handler state machine will never call the method twice.
-    pub fn request_line(&mut self, method: Method, uri: &str, version: Version)
+    pub fn request_line(&mut self, method: &str, path: &str, version: Version)
     {
         use self::Body::*;
         use self::MessageState::*;
         match self.1 {
             RequestStart => {
-                write!(self.0, "{} {} {}\r\n", method, uri, version).unwrap();
+                write!(self.0, "{} {} {}\r\n", method, path, version).unwrap();
                 // It's common to allow request body for GET, is it so
                 // expected for the HEAD too? Other methods?
                 self.1 = Headers { body: Normal, request: true,
@@ -415,7 +414,6 @@ impl<'a> Message<'a> {
 #[cfg(test)]
 mod test {
     use rotor_stream::Buf;
-    use hyper::method::Method;
     use hyper::status::StatusCode;
     use hyper::version::HttpVersion;
     use super::{Message, MessageState, Body};
@@ -453,7 +451,7 @@ mod test {
     #[test]
     fn minimal_request() {
         assert_eq!(&do_request(|mut msg| {
-            msg.request_line(Method::Get, "/", HttpVersion::Http10);
+            msg.request_line("GET", "/", HttpVersion::Http10);
             msg.done_headers().unwrap();
             msg.done();
         })[..], "GET / HTTP/1.0\r\n\r\n".as_bytes());

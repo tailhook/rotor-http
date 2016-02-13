@@ -9,7 +9,6 @@ use std::net::ToSocketAddrs;
 use rotor::{Scope};
 use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
 use rotor_http::client::{Context as HttpCtx};
-use rotor_http::method::Method::Get;
 use rotor_http::version::HttpVersion::Http11;
 use rotor_http::Deadline;
 
@@ -22,7 +21,7 @@ struct Req(String);
 impl Client for Req {
     type Context = Context;
     fn prepare_request(self, req: &mut Request) -> Option<Self> {
-        req.start(Get, &self.0, Http11);
+        req.start("GET", &self.0, Http11);
         req.done_headers().unwrap();
         req.done();
         Some(self)
