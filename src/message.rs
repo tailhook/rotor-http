@@ -1,14 +1,10 @@
 use std::io::Write;
-use std::any::Any;
+use std::ascii::AsciiExt;
 
 use rotor_stream::Buf;
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion as Version;
-use hyper::header::{Header, HeaderFormat, HeaderFormatter};
-use hyper::header::{Connection, ConnectionOption};
-use hyper::header::{ContentLength, TransferEncoding, Encoding};
-
 
 quick_error! {
     #[derive(Debug)]
@@ -26,12 +22,13 @@ quick_error! {
         ContentLengthAfterTransferEncoding {
             description("Content-Length added after Transfer-Encoding")
         }
-        UnknownTransferEncoding {
-            description("Unknown Transfer-Encoding, only chunked is supported")
-        }
         CantDetermineBodySize {
-            description("Neither Content-Length nor TransferEncoding \
+            description("Neither Content-Length nor Transfer-Encoding \
                 is present in the headers")
+        }
+        BodyLengthHeader {
+            description("Content-Length and Transfer-Encoding must be set \
+                using the specialized methods")
         }
     }
 }
@@ -143,10 +140,17 @@ impl<'a> Message<'a> {
                                    close: false };
             }
             ref state => {
-                panic!("Called status() method on response in a state {:?}",
+                panic!("Called status() method on request in state {:?}",
                        state)
             }
         }
+    }
+
+    fn write_header(&mut self, name: &str, value: &[u8]) {
+        self.0.write_all(name.as_bytes()).unwrap();
+        self.0.write_all(b": ").unwrap();
+        self.0.write_all(value).unwrap();
+        self.0.write_all(b"\r\n").unwrap();
     }
 
     /// Add header to message
@@ -154,10 +158,12 @@ impl<'a> Message<'a> {
     /// Header is written into the output buffer immediately. And is sent
     /// as soon as the next loop iteration
     ///
-    /// Fails when invalid combination of headers is encountered. Note we
-    /// don't validate all the headers but only security-related ones like
-    /// double content-length and content-length with the combination of
-    /// transfer-encoding.
+    /// `Content-Length` header must be send using the `add_length` method
+    /// and `Transfer-Encoding: chunked` must be set with the `add_chunked`
+    /// method. These two headers are important for the security of HTTP.
+    ///
+    /// Note that there is currently no way to use a transfer encoding other
+    /// than chunked.
     ///
     /// We return Result here to make implementing proxies easier. In the
     /// application handler it's okay to unwrap the result and to get
@@ -165,54 +171,92 @@ impl<'a> Message<'a> {
     ///
     /// # Panics
     ///
-    /// * Panics when add_header is called in the wrong state.
-    /// * Panics on unsupported transfer encoding
-    ///
-    pub fn add_header<H: Header+HeaderFormat>(&mut self, header: H)
+    /// Panics when `add_header` is called in the wrong state.
+    pub fn add_header(&mut self, name: &str, value: &[u8])
         -> Result<(), HeaderError>
     {
         use self::MessageState::*;
         use self::HeaderError::*;
+        if name.eq_ignore_ascii_case("Content-Length")
+            || name.eq_ignore_ascii_case("Transfer-Encoding") {
+            return Err(BodyLengthHeader)
+        }
         match self.1 {
-            Headers { ref mut content_length, ref mut chunked, .. } => {
-                match Any::downcast_ref::<ContentLength>(&header) {
-                    Some(&ContentLength(ln)) => {
-                        if *chunked {
-                            return Err(ContentLengthAfterTransferEncoding);
-                        }
-                        if content_length.is_some() {
-                            return Err(DuplicateContentLength);
-                        }
-                        *content_length = Some(ln);
-                    }
-                    None => {}
-                }
-                match Any::downcast_ref::<TransferEncoding>(&header) {
-                    Some(te) if te[..] == [Encoding::Chunked] => {
-                        if *chunked {
-                            return Err(DuplicateTransferEncoding);
-                        }
-                        if content_length.is_some() {
-                            return Err(TransferEncodingAfterContentLength);
-                        }
-                        *chunked = true;
-                    }
-                    Some(_) => {
-                        return Err(UnknownTransferEncoding);
-                    }
-                    None => {}
-                }
-                write!(self.0, "{}: {}\r\n",
-                    H::header_name(),
-                    HeaderFormatter(&header)).unwrap();
+            Headers { .. } => {
+                self.write_header(name, value);
                 Ok(())
             }
             ref state => {
-                panic!("Called add_header() method on response in a state {:?}",
+                panic!("Called add_header() method on a message in state {:?}",
                        state)
             }
         }
     }
+
+    /// Add a content length to the message.
+    ///
+    /// The `Content-Length` header is written to the output buffer immediately.
+    /// It is checked that there are no other body length headers present in the
+    /// message. When the body is send the length is validated.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `add_length` is called in the wrong state.
+    pub fn add_length(&mut self, n: u64)
+        -> Result<(), HeaderError> {
+        use self::MessageState::*;
+        use self::HeaderError::*;
+        match self.1 {
+            Headers { content_length: Some(_), .. } => {
+                return Err(DuplicateContentLength);
+            }
+            Headers { chunked: true, .. } => {
+                return Err(ContentLengthAfterTransferEncoding);
+            }
+            Headers { ref mut content_length, .. } => {
+                *content_length = Some(n);
+            }
+            ref state => {
+                panic!("Called add_length() method on message in state {:?}",
+                       state)
+            }
+        }
+        self.write_header("Content-Length", &n.to_string().into_bytes()[..]);
+        Ok(())
+    }
+
+    /// Sets the transfer encoding to chunked.
+    ///
+    /// Writes `Transfer-Encoding: chunked` to the output buffer immediately.
+    /// It is assured that there is only one body length header is present
+    /// and the body is written in chunked encoding.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `add_chunked` is called in the wrong state.
+    pub fn add_chunked(&mut self)
+        -> Result<(), HeaderError> {
+            use self::MessageState::*;
+            use self::HeaderError::*;
+            match self.1 {
+                Headers { content_length: Some(_), .. } => {
+                    return Err(TransferEncodingAfterContentLength);
+                }
+                Headers { chunked: true, .. } => {
+                    return Err(DuplicateTransferEncoding);
+                }
+                Headers { ref mut chunked, .. } => {
+                    *chunked = true;
+                }
+            ref state => {
+                panic!("Called add_chunked() method on message in state {:?}",
+                       state)
+            }
+        }
+        self.write_header("Transfer-Encoding", b"chunked");
+        Ok(())
+    }
+
     /// Returns true if at least `status()` method has been called
     ///
     /// This is mostly useful to find out whether we can build an error page
@@ -240,8 +284,7 @@ impl<'a> Message<'a> {
         use self::Body::*;
         use self::MessageState::*;
         if let Headers { close: true, .. } = self.1 {
-            self.add_header(Connection(vec![ConnectionOption::Close]))
-                .unwrap();
+            self.add_header("Connection", b"close").unwrap();
         }
         let result = match self.1 {
             Headers { body: Ignored, .. } => {
@@ -324,7 +367,7 @@ impl<'a> Message<'a> {
                 self.0.write(data).unwrap();
             }
             ref state => {
-                panic!("Called write_body() method on response \
+                panic!("Called write_body() method on message \
                     in a state {:?}", state)
             }
         }
@@ -374,7 +417,6 @@ mod test {
     use rotor_stream::Buf;
     use hyper::method::Method;
     use hyper::status::StatusCode;
-    use hyper::header::ContentLength;
     use hyper::version::HttpVersion;
     use super::{Message, MessageState, Body};
 
@@ -421,7 +463,7 @@ mod test {
     fn minimal_response() {
         assert_eq!(&do_response10(|mut msg| {
             msg.response_status(StatusCode::Ok);
-            msg.add_header(ContentLength(0)).unwrap();
+            msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
             msg.done();
         })[..], "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n".as_bytes());
@@ -431,7 +473,7 @@ mod test {
     fn minimal_response11() {
         assert_eq!(&do_response11(false, |mut msg| {
             msg.response_status(StatusCode::Ok);
-            msg.add_header(ContentLength(0)).unwrap();
+            msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
             msg.done();
         })[..], "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".as_bytes());
@@ -441,7 +483,7 @@ mod test {
     fn close_response11() {
         assert_eq!(&do_response11(true, |mut msg| {
             msg.response_status(StatusCode::Ok);
-            msg.add_header(ContentLength(0)).unwrap();
+            msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
             msg.done();
         })[..], concat!("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n",

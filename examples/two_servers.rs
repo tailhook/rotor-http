@@ -6,7 +6,6 @@ extern crate time;
 use rotor::{Scope, Compose2};
 use rotor_http::{Deadline, ServerFsm};
 use rotor_http::status::StatusCode::{self};
-use rotor_http::header::ContentLength;
 use rotor_http::server::{RecvMode, Server, Head, Response};
 use rotor::mio::tcp::{TcpListener};
 use time::Duration;
@@ -42,7 +41,7 @@ impl rotor_http::server::Context for Context {
 
 fn send_string(res: &mut Response, data: &[u8]) {
     res.status(StatusCode::Ok);
-    res.add_header(ContentLength(data.len() as u64)).unwrap();
+    res.add_length(data.len() as u64).unwrap();
     res.done_headers().unwrap();
     res.write_body(data);
     res.done();

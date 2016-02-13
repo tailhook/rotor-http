@@ -12,7 +12,6 @@ use std::os::unix::io::AsRawFd;
 use rotor::Scope;
 use rotor_http::{Deadline, ServerFsm};
 use rotor_http::status::StatusCode::{self, NotFound};
-use rotor_http::header::ContentLength;
 use rotor_http::server::{RecvMode, Server, Head, Response};
 use rotor_http::server::{Context as HttpContext};
 use time::Duration;
@@ -50,7 +49,7 @@ enum HelloWorld {
 
 fn send_string(res: &mut Response, data: &[u8]) {
     res.status(StatusCode::Ok);
-    res.add_header(ContentLength(data.len() as u64)).unwrap();
+    res.add_length(data.len() as u64).unwrap();
     res.done_headers().unwrap();
     res.write_body(data);
     res.done();
