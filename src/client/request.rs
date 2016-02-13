@@ -14,7 +14,7 @@ impl<'a> From<Message<'a>> for Request<'a> {
 
 impl<'a> Request<'a> {
     /// Creates new response message by extracting needed fields from Head
-    pub fn new<'x>(out_buf: &'x mut Buf) -> Request<'x>
+    pub fn new(out_buf: &mut Buf) -> Request
     {
         MessageState::RequestStart.with(out_buf)
     }

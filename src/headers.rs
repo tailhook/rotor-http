@@ -1,51 +1,19 @@
 use std::ascii::AsciiExt;
 
 pub fn is_transfer_encoding(val: &str) -> bool {
-    if val.len() != "transfer-encoding".len() {
-        return false;
-    }
-    for (idx, ch) in val.bytes().enumerate() {
-        if b"transfer-encoding"[idx] != ch.to_ascii_lowercase() {
-            return false;
-        }
-    }
-    return true;
+    val.eq_ignore_ascii_case("Transfer-Encoding")
 }
 
 pub fn is_content_length(val: &str) -> bool {
-    if val.len() != "content-length".len() {
-        return false;
-    }
-    for (idx, ch) in val.bytes().enumerate() {
-        if b"content-length"[idx] != ch.to_ascii_lowercase() {
-            return false;
-        }
-    }
-    return true;
+    val.eq_ignore_ascii_case("Content-Length")
 }
 
 pub fn is_connection(val: &str) -> bool {
-    if val.len() != "connection".len() {
-        return false;
-    }
-    for (idx, ch) in val.bytes().enumerate() {
-        if b"connection"[idx] != ch.to_ascii_lowercase() {
-            return false;
-        }
-    }
-    return true;
+    val.eq_ignore_ascii_case("Connection")
 }
 
 pub fn is_expect(val: &str) -> bool {
-    if val.len() != "expect".len() {
-        return false;
-    }
-    for (idx, ch) in val.bytes().enumerate() {
-        if b"expect"[idx] != ch.to_ascii_lowercase() {
-            return false;
-        }
-    }
-    return true;
+    val.eq_ignore_ascii_case("Expect")
 }
 
 // header value is byte sequence
@@ -77,7 +45,7 @@ pub fn is_close(val: &[u8]) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 // header value is byte sequence
@@ -109,7 +77,7 @@ pub fn is_chunked(val: &[u8]) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 // header value is byte sequence
@@ -141,7 +109,7 @@ pub fn is_continue(val: &[u8]) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 #[cfg(test)]
@@ -219,4 +187,3 @@ mod test {
         assert!(!is_continue(b"100-coztinue   "));
     }
 }
-

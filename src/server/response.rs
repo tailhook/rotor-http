@@ -32,8 +32,8 @@ impl<'a> From<Message<'a>> for Response<'a> {
 
 impl<'a> Response<'a> {
     /// Creates new response message by extracting needed fields from Head
-    pub fn new<'x>(out_buf: &'x mut Buf, version: Version,
-        is_head: bool, do_close: bool) -> Response<'x>
+    pub fn new(out_buf: &mut Buf, version: Version,
+        is_head: bool, do_close: bool) -> Response
     {
         use message::Body::*;
         // TODO(tailhook) implement Connection: Close,
@@ -65,7 +65,7 @@ impl<'a> Response<'a> {
             }
             _ => {}
         }
-        return false;
+        false
     }
 
     /// Write status line
