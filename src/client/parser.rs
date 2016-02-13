@@ -426,7 +426,7 @@ impl<M, S> Protocol for Parser<M, S>
                 }
             }
             ReadHeaders {..} => unreachable!(),
-            Response { progress, machine, deadline, request }  => {
+            Response { .. }  => {
                 unimplemented!();
             }
             Idle => {

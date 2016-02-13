@@ -1,5 +1,4 @@
 use rotor_stream::Buf;
-use hyper::header::{Header, HeaderFormat};
 use hyper::method::Method;
 use hyper::version::HttpVersion as Version;
 
@@ -34,15 +33,17 @@ impl<'a> Request<'a> {
         self.1 = Some(method == Method::Head);
         self.0.request_line(method, uri, version);
     }
-    /// Add header to response
+    /// Add header to message
     ///
     /// Header is written into the output buffer immediately. And is sent
     /// as soon as the next loop iteration
     ///
-    /// Fails when invalid combination of headers is encountered. Note we
-    /// don't validate all the headers but only security-related ones like
-    /// double content-length and content-length with the combination of
-    /// transfer-encoding.
+    /// `Content-Length` header must be send using the `add_length` method
+    /// and `Transfer-Encoding: chunked` must be set with the `add_chunked`
+    /// method. These two headers are important for the security of HTTP.
+    ///
+    /// Note that there is currently no way to use a transfer encoding other
+    /// than chunked.
     ///
     /// We return Result here to make implementing proxies easier. In the
     /// application handler it's okay to unwrap the result and to get
@@ -50,13 +51,39 @@ impl<'a> Request<'a> {
     ///
     /// # Panics
     ///
-    /// * Panics when add_header is called in the wrong state.
-    /// * Panics on unsupported transfer encoding
-    ///
-    pub fn add_header<H: Header+HeaderFormat>(&mut self, header: H)
+    /// Panics when `add_header` is called in the wrong state.
+    pub fn add_header(&mut self, name: &str, value: &[u8])
         -> Result<(), HeaderError>
     {
-        self.0.add_header(header)
+        self.0.add_header(name, value)
+    }
+    /// Add a content length to the message.
+    ///
+    /// The `Content-Length` header is written to the output buffer immediately.
+    /// It is checked that there are no other body length headers present in the
+    /// message. When the body is send the length is validated.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `add_length` is called in the wrong state.
+    pub fn add_length(&mut self, n: u64)
+        -> Result<(), HeaderError>
+    {
+        self.0.add_length(n)
+    }
+    /// Sets the transfer encoding to chunked.
+    ///
+    /// Writes `Transfer-Encoding: chunked` to the output buffer immediately.
+    /// It is assured that there is only one body length header is present
+    /// and the body is written in chunked encoding.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `add_chunked` is called in the wrong state.
+    pub fn add_chunked(&mut self)
+        -> Result<(), HeaderError>
+    {
+        self.0.add_chunked()
     }
     /// Returns true if at least `status()` method has been called
     ///
