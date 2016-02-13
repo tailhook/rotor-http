@@ -2,7 +2,7 @@ use std::io::Write;
 use std::ascii::AsciiExt;
 
 use rotor_stream::Buf;
-use hyper::status::StatusCode;
+
 use hyper::version::HttpVersion as Version;
 
 quick_error! {
@@ -85,8 +85,7 @@ impl<'a> Message<'a> {
     /// handler state machine will never call the method twice.
     ///
     /// When status is 10x we don't assert yet
-    pub fn response_status(&mut self, code: StatusCode) {
-        use hyper::status::StatusCode::*;
+    pub fn response_status(&mut self, code: u16, reason: &str) {
         use self::Body::*;
         use self::MessageState::*;
         match self.1 {
@@ -100,10 +99,10 @@ impl<'a> Message<'a> {
                 //
                 // TODO(tailhook) should we assert?
                 //
-                write!(self.0, "{} {}\r\n", version, code).unwrap();
-                if matches!(code, SwitchingProtocols|NoContent) {
+                write!(self.0, "{} {} {}\r\n", version, code, reason).unwrap();
+                if code == 101 || code == 204 {
                     body = Denied;
-                } else if body == Normal && code == NotModified {
+                } else if body == Normal && code == 304 {
                     body = Ignored;
                 }
                 self.1 = Headers { body: body, request: false,
@@ -414,7 +413,7 @@ impl<'a> Message<'a> {
 #[cfg(test)]
 mod test {
     use rotor_stream::Buf;
-    use hyper::status::StatusCode;
+
     use hyper::version::HttpVersion;
     use super::{Message, MessageState, Body};
 
@@ -460,7 +459,7 @@ mod test {
     #[test]
     fn minimal_response() {
         assert_eq!(&do_response10(|mut msg| {
-            msg.response_status(StatusCode::Ok);
+            msg.response_status(200, "OK");
             msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
             msg.done();
@@ -470,7 +469,7 @@ mod test {
     #[test]
     fn minimal_response11() {
         assert_eq!(&do_response11(false, |mut msg| {
-            msg.response_status(StatusCode::Ok);
+            msg.response_status(200, "OK");
             msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
             msg.done();
@@ -480,7 +479,7 @@ mod test {
     #[test]
     fn close_response11() {
         assert_eq!(&do_response11(true, |mut msg| {
-            msg.response_status(StatusCode::Ok);
+            msg.response_status(200, "OK");
             msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
             msg.done();
