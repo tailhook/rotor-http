@@ -11,7 +11,6 @@ use std::os::unix::io::AsRawFd;
 
 use rotor::Scope;
 use rotor_http::{Deadline, ServerFsm};
-use rotor_http::status::StatusCode::{self, NotFound};
 use rotor_http::server::{RecvMode, Server, Head, Response};
 use rotor_http::server::{Context as HttpContext};
 use time::Duration;
@@ -59,11 +58,11 @@ impl Server for HelloWorld {
     type Context = Context;
     fn headers_received(head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
-        -> Result<(Self, RecvMode, Deadline), StatusCode>
+        -> Option<(Self, RecvMode, Deadline)>
     {
         use self::HelloWorld::*;
         scope.increment();
-        Ok((match head.path {
+        Some((match head.path {
             "/" => Hello,
             "/num" => GetNum,
             p if p.starts_with('/') => HelloName(p[1..].to_string()),
@@ -90,7 +89,12 @@ impl Server for HelloWorld {
                 send_string(res, format!("Hello {}!", name).as_bytes());
             }
             PageNotFound => {
-                scope.emit_error_page(NotFound, res);
+                let data = b"404 - Page not found";
+                res.status(404, "Not Found");
+                res.add_length(data.len() as u64).unwrap();
+                res.done_headers().unwrap();
+                res.write_body(data);
+                res.done();
             }
         }
         None

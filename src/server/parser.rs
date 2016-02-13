@@ -256,13 +256,13 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
              state(res))
         };
         match (head_result, body) {
-            (Ok((_, RecvMode::Buffered(x), _)), _) if x >= MAX_BUF_SIZE
+            (Some((_, RecvMode::Buffered(x), _)), _) if x >= MAX_BUF_SIZE
             => panic!("Can't buffer {} bytes, max {}", x, MAX_BUF_SIZE),
-            (Ok((_, RecvMode::Buffered(y), _)), BodyKind::Fixed(x))
+            (Some((_, RecvMode::Buffered(y), _)), BodyKind::Fixed(x))
             if x >= y as u64 => {
                 return FatalError(PayloadTooLarge)
             }
-            (Ok((m, mode, dline)), body) => {
+            (Some((m, mode, dline)), body) => {
                 if expect && !state.is_started() {
                     write!(output, "{} 100 Continue\r\n\r\n", version)
                         .unwrap();
@@ -275,15 +275,15 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
                     connection_close: close,
                 })
             }
-            (Err(status), _) => {
+            (None, _) => {
                 if state.is_started() {
                     // Can't do anything as response is already started
                     // just drop connection as fast as possible
                     ForceClose
                 } else if close || body != BodyKind::Fixed(0) {
-                    FatalError(status)
+                    FatalError(BadRequest)
                 } else {
-                    NormError(is_head, version, status)
+                    NormError(is_head, version, BadRequest)
                 }
             }
         }
