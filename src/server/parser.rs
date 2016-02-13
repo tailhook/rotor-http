@@ -83,7 +83,7 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
         Some((ParserImpl::DoneResponse.wrap(), E::Flush(0),
               Deadline::now() + scope.byte_timeout()))
     }
-    fn raw_error<'x>(scope: &mut Scope<M::Context>,
+    fn raw_error(scope: &mut Scope<M::Context>,
         transport: &mut Transport<<Self as Protocol>::Socket>,
         code: ErrorCode)
         -> Request<Parser<M, S>>
@@ -404,7 +404,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                     BufferChunked(limit, off, 0) => {
                         let clen_end = inp[off..end].iter()
                             .position(|&x| x == b';')
-                            .map(|x| x + off).unwrap_or(end);
+                            .map_or(end, |x| x + off);
                         let val_opt = from_utf8(&inp[off..clen_end]).ok()
                             .and_then(|x| u64::from_str_radix(x, 16).ok());
                         match val_opt {
@@ -460,7 +460,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                     ProgressiveChunked(hint, off, 0) => {
                         let clen_end = inp[off..end].iter()
                             .position(|&x| x == b';')
-                            .map(|x| x + off).unwrap_or(end);
+                            .map_or(end, |x| x + off);
                         let val_opt = from_utf8(&inp[off..clen_end]).ok()
                             .and_then(|x| u64::from_str_radix(x, 16).ok());
                         match val_opt {

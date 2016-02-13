@@ -8,7 +8,7 @@ readme = "README.rst"
 keywords = ["mio", "http", "websocket", "rotor"]
 homepage = "http://github.com/tailhook/rotor-http"
 version = "0.5.0"
-authors = ["paul@colomiets.name"]
+authors = ["paul@colomiets.name", "pyfisch@gmail.com"]
 
 [dependencies]
 httparse = "1.1"

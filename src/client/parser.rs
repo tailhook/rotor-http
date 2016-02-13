@@ -113,7 +113,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
             }
         }
     }
-    return Ok((result, close))
+    Ok((result, close))
 }
 fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
     use recvmode::RecvMode::*;
@@ -294,7 +294,7 @@ impl<M, S> Protocol for Parser<M, S>
                     BufferChunked(limit, off, 0) => {
                         let clen_end = inp[off..end].iter()
                             .position(|&x| x == b';')
-                            .map(|x| x + off).unwrap_or(end);
+                            .map_or(end, |x| x + off);
                         let val_opt = from_utf8(&inp[off..clen_end]).ok()
                             .and_then(|x| u64::from_str_radix(x, 16).ok());
                         match val_opt {
@@ -349,7 +349,7 @@ impl<M, S> Protocol for Parser<M, S>
                     ProgressiveChunked(hint, off, 0) => {
                         let clen_end = inp[off..end].iter()
                             .position(|&x| x == b';')
-                            .map(|x| x + off).unwrap_or(end);
+                            .map_or(end, |x| x + off);
                         let val_opt = from_utf8(&inp[off..clen_end]).ok()
                             .and_then(|x| u64::from_str_radix(x, 16).ok());
                         match val_opt {
