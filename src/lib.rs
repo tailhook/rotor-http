@@ -1,4 +1,3 @@
-extern crate ip;
 extern crate rotor;
 extern crate httparse;
 extern crate time;

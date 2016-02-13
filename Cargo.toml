@@ -12,19 +12,15 @@ authors = ["paul@colomiets.name", "pyfisch@gmail.com"]
 
 [dependencies]
 httparse = "1.1"
-log = "0.3"
 time = "0.1"
-void = "0.0.5"
 rotor = "0.5.1"
 rotor-stream = "0.4.0"
 quick-error = "0.2.1"
 matches = "0.1"
-ip = "1.0.0"
 
 [dev-dependencies]
 libc = "0.1"
 net2 = "0.2"
-argparse = "0.2.1"
 
 [lib]
 name = "rotor_http"
