@@ -11,7 +11,6 @@ version = "0.5.0"
 authors = ["paul@colomiets.name"]
 
 [dependencies]
-hyper = "0.7"
 httparse = "1.1"
 log = "0.3"
 time = "0.1"

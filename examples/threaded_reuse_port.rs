@@ -12,7 +12,6 @@ use std::os::unix::io::AsRawFd;
 use rotor::Scope;
 use rotor_http::{Deadline, ServerFsm};
 use rotor_http::server::{RecvMode, Server, Head, Response};
-use rotor_http::server::{Context as HttpContext};
 use time::Duration;
 
 
