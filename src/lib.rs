@@ -1,6 +1,5 @@
 extern crate ip;
 extern crate rotor;
-extern crate hyper;
 extern crate httparse;
 extern crate time;
 extern crate rotor_stream;

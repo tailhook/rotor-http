@@ -9,8 +9,6 @@ use rotor_stream::MAX_BUF_SIZE;
 use rotor::Scope;
 use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport, Exception};
-use hyper::status::StatusCode::{PayloadTooLarge, BadRequest, RequestTimeout};
-use hyper::status::StatusCode::{self, RequestHeaderFieldsTooLarge};
 
 use httparse;
 use headers;
@@ -24,6 +22,8 @@ use super::request::Head;
 use super::body::BodyKind;
 use super::response::state;
 use Version;
+
+use self::ErrorCode::*;
 
 
 struct ReadBody<M: Server> {
@@ -59,6 +59,13 @@ enum ParserImpl<M: Server> {
     DoneResponse,
 }
 
+pub enum ErrorCode {
+    BadRequest,
+    PayloadTooLarge,
+    RequestTimeout,
+    RequestHeaderFieldsTooLarge,
+}
+
 impl<M: Server, S: StreamSocket> Parser<M, S> {
     fn flush(scope: &mut Scope<M::Context>) -> Request<Parser<M, S>>
     {
@@ -66,7 +73,7 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
               Deadline::now() + scope.byte_timeout()))
     }
     fn error<'x>(scope: &mut Scope<M::Context>, mut response: Response<'x>,
-        code: StatusCode)
+        code: ErrorCode)
         -> Request<Parser<M, S>>
     {
         if !response.is_started() {
@@ -78,7 +85,7 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
     }
     fn raw_error<'x>(scope: &mut Scope<M::Context>,
         transport: &mut Transport<<Self as Protocol>::Socket>,
-        code: StatusCode)
+        code: ErrorCode)
         -> Request<Parser<M, S>>
     {
         let resp = Response::new(transport.output(),
@@ -197,8 +204,8 @@ fn scan_headers(version: Version, headers: &[httparse::Header])
 
 enum HeaderResult<M: Server> {
     Okay(ReadBody<M>),
-    NormError(bool, Version, StatusCode),
-    FatalError(StatusCode),
+    NormError(bool, Version, ErrorCode),
+    FatalError(ErrorCode),
     ForceClose,
 }
 
@@ -639,19 +646,15 @@ mod test {
     use rotor_stream::Deadline;
     use super::Parser;
     use super::super::{Server, Head, Response, RecvMode};
-    use hyper::status::StatusCode;
 
-    struct Context;
     struct Proto(usize);
     struct MockStream;
 
-    impl super::super::Context for Context {}
-
     impl Server for Proto {
-        type Context = Context;
+        type Context = ();
         fn headers_received(_head: Head, _response: &mut Response,
             _scope: &mut Scope<Self::Context>)
-            -> Result<(Self, RecvMode, Deadline), StatusCode>
+            -> Option<(Self, RecvMode, Deadline)>
         { unimplemented!(); }
         fn request_received(self, _data: &[u8], _response: &mut Response,
             _scope: &mut Scope<Self::Context>) -> Option<Self>
