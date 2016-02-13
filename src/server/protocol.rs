@@ -1,4 +1,3 @@
-use hyper::status::StatusCode;
 use rotor::Scope;
 use rotor_stream::{Deadline};
 
@@ -35,7 +34,7 @@ pub trait Server: Sized {
     /// somewhere.
     fn headers_received(head: Head, response: &mut Response,
         scope: &mut Scope<Self::Context>)
-        -> Result<(Self, RecvMode, Deadline), StatusCode>;
+        -> Option<(Self, RecvMode, Deadline)>;
 
     /// Called when full request is received in buffered mode.
     ///

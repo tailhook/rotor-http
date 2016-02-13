@@ -5,7 +5,6 @@ extern crate time;
 
 use rotor::{Scope, Compose2};
 use rotor_http::{Deadline, ServerFsm};
-use rotor_http::status::StatusCode;
 use rotor_http::server::{RecvMode, Server, Head, Response};
 use rotor::mio::tcp::{TcpListener};
 use time::Duration;
@@ -51,10 +50,10 @@ impl Server for Incr {
     type Context = Context;
     fn headers_received(_head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
-        -> Result<(Self, RecvMode, Deadline), StatusCode>
+        -> Option<(Self, RecvMode, Deadline)>
     {
         scope.increment();
-        Ok((Incr, RecvMode::Buffered(1024),
+        Some((Incr, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
@@ -94,9 +93,9 @@ impl Server for Get {
     type Context = Context;
     fn headers_received(_head: Head, _res: &mut Response,
         _scope: &mut Scope<Context>)
-        -> Result<(Self, RecvMode, Deadline), StatusCode>
+        -> Option<(Self, RecvMode, Deadline)>
     {
-        Ok((Get, RecvMode::Buffered(1024),
+        Some((Get, RecvMode::Buffered(1024),
             Deadline::now() + Duration::seconds(10)))
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
