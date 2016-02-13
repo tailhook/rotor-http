@@ -1,5 +1,5 @@
 use rotor_stream::Buf;
-use hyper::status::StatusCode;
+
 use hyper::version::HttpVersion;
 
 use message::{MessageState, Message, HeaderError};
@@ -80,8 +80,8 @@ impl<'a> Response<'a> {
     /// handler state machine will never call the method twice.
     ///
     /// When status is 100x
-    pub fn status(&mut self, code: StatusCode) {
-        self.0.response_status(code)
+    pub fn status(&mut self, code: u16, reason: &str) {
+        self.0.response_status(code, reason)
     }
     /// Add header to message
     ///

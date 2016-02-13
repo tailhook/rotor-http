@@ -43,7 +43,7 @@ enum HelloWorld {
 }
 
 fn send_string(res: &mut Response, data: &[u8]) {
-    res.status(StatusCode::Ok);
+    res.status(200, "OK");
     res.add_length(data.len() as u64).unwrap();
     res.done_headers().unwrap();
     res.write_body(data);
