@@ -73,10 +73,9 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     if is_head || (code > 100 && code < 200) || code == 204 || code == 304 {
         for header in headers.iter() {
             // TODO(tailhook) check for transfer encoding and content-length
-            if headers::is_connection(header.name) {
-                if header.value.split(|&x| x == b',').any(headers::is_close) {
-                    close = true;
-                }
+            if headers::is_connection(header.name)
+                && header.value.split(|&x| x == b',').any(headers::is_close) {
+                close = true;
             }
         }
         return Ok((Fixed(0), close))
@@ -107,10 +106,9 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
                 // tralsfer-encoding has preference and don't allow keep-alive
                 close = true;
             }
-        } else if headers::is_connection(header.name) {
-            if header.value.split(|&x| x == b',').any(headers::is_close) {
-                close = true;
-            }
+        } else if headers::is_connection(header.name)
+            && header.value.split(|&x| x == b',').any(headers::is_close) {
+            close = true;
         }
     }
     Ok((result, close))
@@ -190,11 +188,11 @@ impl<M: Client, S: StreamSocket> Parser<M, S> {
         -> Task<Parser<M, S>>
     {
         if req.is_complete() {
-            return ParserImpl::Idle.request(scope);
+            ParserImpl::Idle.request(scope)
         } else {
             // Response is done before request is sent fully, let's close
             // the connectoin
-            return None;
+            None
         }
     }
 }

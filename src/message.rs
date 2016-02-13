@@ -294,13 +294,12 @@ impl<'a> Message<'a> {
                 Ok(false)
             }
             Headers { body: Normal, content_length: Some(cl),
-                      chunked: false, request: _, close: _}
+                      chunked: false, .. }
             => {
                 self.1 = FixedSizeBody(cl);
                 Ok(true)
             }
-            Headers { body: Normal, content_length: None, chunked: true,
-                      request: _, close: _ }
+            Headers { body: Normal, content_length: None, chunked: true, .. }
             => {
                 self.1 = ChunkedBody;
                 Ok(true)
@@ -308,13 +307,13 @@ impl<'a> Message<'a> {
             Headers { content_length: Some(_), chunked: true, .. }
             => unreachable!(),
             Headers { body: Normal, content_length: None, chunked: false,
-                      request: true, close: _ }
+                      request: true, .. }
             => {
                 self.1 = ZeroBodyMessage;
                 Ok(false)
             }
             Headers { body: Normal, content_length: None, chunked: false,
-                      request: false, close: _ }
+                      request: false,  .. }
             => Err(HeaderError::CantDetermineBodySize),
             ref state => {
                 panic!("Called done_headers() method on  in a state {:?}",

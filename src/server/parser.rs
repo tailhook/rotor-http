@@ -189,14 +189,12 @@ fn scan_headers(version: Version, headers: &[httparse::Header])
                 // tralsfer-encoding has preference and don't allow keep-alive
                 close = true;
             }
-        } else if headers::is_connection(header.name) {
-            if header.value.split(|&x| x == b',').any(headers::is_close) {
-                close = true;
-            }
-        } else if headers::is_expect(header.name) {
-            if headers::is_continue(header.value) {
-                expect_continue = true;
-            }
+        } else if headers::is_connection(header.name)
+            && header.value.split(|&x| x == b',').any(headers::is_close) {
+            close = true;
+        } else if headers::is_expect(header.name)
+            &&  headers::is_continue(header.value) {
+            expect_continue = true;
         }
     }
     Ok((result, expect_continue, close))

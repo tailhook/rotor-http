@@ -65,7 +65,7 @@ impl<'a> Response<'a> {
             }
             _ => {}
         }
-        return false;
+        false
     }
 
     /// Write status line

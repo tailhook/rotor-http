@@ -45,7 +45,7 @@ pub fn is_close(val: &[u8]) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 // header value is byte sequence
@@ -77,7 +77,7 @@ pub fn is_chunked(val: &[u8]) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 // header value is byte sequence
@@ -109,7 +109,7 @@ pub fn is_continue(val: &[u8]) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 #[cfg(test)]
