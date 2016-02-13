@@ -1,5 +1,5 @@
-use hyper::version::HttpVersion as Version;
 use httparse;
+use Version;
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

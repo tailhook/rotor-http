@@ -11,7 +11,6 @@ use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport, Exception};
 use hyper::status::StatusCode::{PayloadTooLarge, BadRequest, RequestTimeout};
 use hyper::status::StatusCode::{self, RequestHeaderFieldsTooLarge};
-use hyper::version::HttpVersion as Version;
 
 use httparse;
 use headers;
@@ -24,6 +23,7 @@ use super::context::Context;
 use super::request::Head;
 use super::body::BodyKind;
 use super::response::state;
+use Version;
 
 
 struct ReadBody<M: Server> {

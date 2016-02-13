@@ -1,8 +1,7 @@
 use rotor_stream::Buf;
 
-use hyper::version::HttpVersion;
-
 use message::{MessageState, Message, HeaderError};
+use Version;
 
 
 /// This response is returned when Response is dropping without writing
@@ -33,7 +32,7 @@ impl<'a> From<Message<'a>> for Response<'a> {
 
 impl<'a> Response<'a> {
     /// Creates new response message by extracting needed fields from Head
-    pub fn new<'x>(out_buf: &'x mut Buf, version: HttpVersion,
+    pub fn new<'x>(out_buf: &'x mut Buf, version: Version,
         is_head: bool, do_close: bool) -> Response<'x>
     {
         use message::Body::*;
@@ -42,7 +41,7 @@ impl<'a> Response<'a> {
         MessageState::ResponseStart {
             body: if is_head { Ignored } else { Normal },
             version: version,
-            close: do_close || version == HttpVersion::Http10,
+            close: do_close || version == Version::Http10,
         }.with(out_buf)
     }
     /// Returns true if it's okay too proceed with keep-alive connection

@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
-use hyper::version::HttpVersion as Version;
 use httparse;
 
 use super::body::BodyKind;
+use Version;
 
 
 #[derive(Debug)]
