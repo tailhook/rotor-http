@@ -1,3 +1,8 @@
+//! Construct HTTP messages.
+//!
+//! The `Request` and `Response` types in server and client call use
+//! the `Message` enum to construct valid HTTP messages.
+
 use std::io::Write;
 use std::ascii::AsciiExt;
 

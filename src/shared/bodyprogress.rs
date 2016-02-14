@@ -1,19 +1,26 @@
 use super::{BodyKind, RecvMode};
 
+/// Describes the type of the body and how it is parsed.
+///
+/// The integer values track the current progress.
 pub enum BodyProgress {
-    /// Buffered fixed-size request (bytes left)
+    /// Buffered fixed-size request (bytes left).
     BufferFixed(usize),
-    /// Buffered request till end of input (byte limit)
+    /// Buffered request till end of input (byte limit).
+    ///
+    /// Only used for legacy responses.
     BufferEof(usize),
     /// Buffered request with chunked encoding
-    /// (limit, bytes buffered, bytes left for current chunk)
+    /// (limit, bytes buffered, bytes left for current chunk).
     BufferChunked(usize, usize, usize),
-    /// Progressive fixed-size request (size hint, bytes left)
+    /// Progressive fixed-size request (size hint, bytes left).
     ProgressiveFixed(usize, u64),
-    /// Progressive till end of input (size hint)
+    /// Progressive till end of input (size hint).
+    ///
+    /// Only used for legacy responses.
     ProgressiveEof(usize),
     /// Progressive with chunked encoding
-    /// (hint, offset, bytes left for current chunk)
+    /// (hint, offset, bytes left for current chunk).
     ProgressiveChunked(usize, usize, u64),
 }
 

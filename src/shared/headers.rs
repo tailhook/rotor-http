@@ -1,3 +1,5 @@
+//! Utility methods for working with headers.
+
 use std::ascii::AsciiExt;
 
 pub fn is_transfer_encoding(val: &str) -> bool {
