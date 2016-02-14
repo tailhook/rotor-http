@@ -1,7 +1,7 @@
 use rotor_stream::Buf;
 
-use message::{MessageState, Message, HeaderError};
-use Version;
+use shared::message::{MessageState, Message, HeaderError};
+use shared::Version;
 
 
 pub struct Request<'a>(Message<'a>, pub Option<bool>);

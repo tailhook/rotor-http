@@ -1,9 +1,14 @@
+//! Construct HTTP messages.
+//!
+//! The `Request` and `Response` types in server and client call use
+//! the `Message` enum to construct valid HTTP messages.
+
 use std::io::Write;
 use std::ascii::AsciiExt;
 
 use rotor_stream::Buf;
 
-use Version;
+use super::Version;
 
 quick_error! {
     #[derive(Debug)]
@@ -414,7 +419,7 @@ impl<'a> Message<'a> {
 mod test {
     use rotor_stream::Buf;
     use super::{Message, MessageState, Body};
-    use Version;
+    use shared::Version;
 
     #[test]
     fn message_size() {

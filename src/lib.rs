@@ -7,12 +7,10 @@ extern crate rotor_stream;
 
 pub mod server;
 pub mod client;
-mod message;
-mod recvmode;
-mod headers;
-mod version;
-
-pub use version::Version;
+#[cfg(not(feature = "shareddocs"))]
+mod shared;
+#[cfg(feature = "shareddocs")]
+pub mod shared;
 
 pub use rotor_stream::{Deadline, Accept, Stream};
 

@@ -1,7 +1,7 @@
 use rotor_stream::Buf;
 
-use message::{MessageState, Message, HeaderError};
-use Version;
+use shared::message::{MessageState, Message, HeaderError};
+use shared::Version;
 
 
 /// This response is returned when Response is dropping without writing
@@ -35,7 +35,7 @@ impl<'a> Response<'a> {
     pub fn new(out_buf: &mut Buf, version: Version,
         is_head: bool, do_close: bool) -> Response
     {
-        use message::Body::*;
+        use shared::message::Body::*;
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
         MessageState::ResponseStart {
@@ -46,8 +46,8 @@ impl<'a> Response<'a> {
     }
     /// Returns true if it's okay too proceed with keep-alive connection
     pub fn finish(self) -> bool {
-        use message::MessageState::*;
-        use message::Body::*;
+        use shared::message::MessageState::*;
+        use shared::message::Body::*;
         if self.is_complete() {
             return true;
         }

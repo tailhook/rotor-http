@@ -24,3 +24,6 @@ net2 = "0.2"
 
 [lib]
 name = "rotor_http"
+
+[features]
+shareddocs = []

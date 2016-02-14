@@ -1,13 +1,5 @@
 use httparse;
-use Version;
-
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum BodyKind {
-    Fixed(u64),
-    Chunked,
-    Eof,
-}
+use super::{BodyKind, Version};
 
 pub struct Head<'a> {
     pub version: Version,
