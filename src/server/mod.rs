@@ -7,7 +7,6 @@ mod request;
 mod protocol;
 mod context;
 mod parser;
-mod body;
 mod response;
 
 pub use self::request::Head;
@@ -15,7 +14,7 @@ pub use self::response::Response;
 pub use self::context::Context;
 pub use self::protocol::{Server};
 pub use self::parser::Parser;
-pub use shared::{RecvMode, Version};
+pub use shared::{BodyKind, RecvMode, Version};
 
 // TODO(tailhook) MAX_HEADERS_SIZE can be moved to Context
 // (i.e. made non-constant), but it's more of a problem for MAX_HEADERS_NUM

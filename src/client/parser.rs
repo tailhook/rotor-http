@@ -12,28 +12,10 @@ use super::{MAX_HEADERS_SIZE, MAX_HEADERS_NUM, MAX_CHUNK_HEAD};
 use super::{Client, Context};
 use super::head::Head;
 use super::request::{Request, state};
-use super::head::BodyKind;
 use shared::message::{MessageState};
-use shared::{RecvMode, Version};
+use shared::Version;
 use shared::headers;
-
-
-pub enum BodyProgress {
-    /// Buffered fixed-size request (bytes left)
-    BufferFixed(usize),
-    /// Buffered request till end of input (byte limit)
-    BufferEOF(usize),
-    /// Buffered request with chunked encoding
-    /// (limit, bytes buffered, bytes left for current chunk)
-    BufferChunked(usize, usize, usize),
-    /// Progressive fixed-size request (size hint, bytes left)
-    ProgressiveFixed(usize, u64),
-    /// Progressive till end of input (size hint)
-    ProgressiveEOF(usize),
-    /// Progressive with chunked encoding
-    /// (hint, offset, bytes left for current chunk)
-    ProgressiveChunked(usize, usize, u64),
-}
+use shared::{BodyKind, BodyProgress};
 
 pub struct Parser<M, S>(ParserImpl<M>, PhantomData<*const S>)
     where M: Client, S: StreamSocket;
@@ -66,7 +48,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     /// 2. If last transfer encoding is chunked -> Chunked
     /// 3. If Content-Length -> Fixed
     /// 4. Else Eof
-    use super::head::BodyKind::*;
+    use super::BodyKind::*;
     let mut has_content_length = false;
     let mut close = false;
     if is_head || (code > 100 && code < 200) || code == 204 || code == 304 {
@@ -114,21 +96,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     }
     Ok((result, close))
 }
-fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
-    use super::RecvMode::*;
-    use super::head::BodyKind::*;
-    use self::BodyProgress::*;
 
-    match (mode, body) {
-        // The size of Fixed(x) is checked in parse_headers
-        (Buffered(_), Fixed(y)) => BufferFixed(y as usize),
-        (Buffered(x), Chunked) => BufferChunked(x, 0, 0),
-        (Buffered(x), Eof) => BufferEOF(x),
-        (Progressive(x), Fixed(y)) => ProgressiveFixed(x, y),
-        (Progressive(x), Chunked) => ProgressiveChunked(x, 0, 0),
-        (Progressive(x), Eof) => ProgressiveEOF(x),
-    }
-}
 
 fn parse_headers<M>(buffer: &mut Buf, end: usize,
     proto: M, mut req: Request, is_head: bool, scope: &mut Scope<M::Context>)
@@ -172,7 +140,7 @@ fn parse_headers<M>(buffer: &mut Buf, end: usize,
             Some(triple) => triple,
             None => return Err(()),
         };
-        let progress = start_body(mode, body);
+        let progress = BodyProgress::start(mode, body);
         ParserImpl::Response {
             machine: mach,
             deadline: dline,
@@ -208,7 +176,7 @@ impl<M: Client> ParserImpl<M> {
     {
         use rotor_stream::Expectation::*;
         use self::ParserImpl::*;
-        use self::BodyProgress::*;
+        use shared::BodyProgress::*;
         let (exp, dline) = match self {
             WriteRequest(..) => (E::Flush(0),
                                  Some(Deadline::now() + scope.byte_timeout())),
@@ -218,13 +186,13 @@ impl<M: Client> ParserImpl<M> {
             Response { ref progress, ref deadline, .. } => {
                 let exp = match *progress {
                     BufferFixed(x) => Bytes(x),
-                    BufferEOF(x) => Bytes(x),
+                    BufferEof(x) => Bytes(x),
                     BufferChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
                     BufferChunked(_, off, y) => Bytes(off + y),
                     ProgressiveFixed(hint, left)
                     => Bytes(min(hint as u64, left) as usize),
-                    ProgressiveEOF(hint) => Bytes(hint),
+                    ProgressiveEof(hint) => Bytes(hint),
                     ProgressiveChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
                     ProgressiveChunked(hint, off, left)
@@ -266,7 +234,7 @@ impl<M, S> Protocol for Parser<M, S>
         -> Task<Self>
     {
         use self::ParserImpl::*;
-        use self::BodyProgress::*;
+        use shared::BodyProgress::*;
         match self.0 {
             WriteRequest(_m) => unreachable!(),
             ReadHeaders { machine, request, is_head } => {
@@ -289,7 +257,7 @@ impl<M, S> Protocol for Parser<M, S>
                         inp.consume(x);
                         return Parser::finish(req, scope);
                     }
-                    BufferEOF(_) => unreachable!(),
+                    BufferEof(_) => unreachable!(),
                     BufferChunked(limit, off, 0) => {
                         let clen_end = inp[off..end].iter()
                             .position(|&x| x == b';')
@@ -339,11 +307,11 @@ impl<M, S> Protocol for Parser<M, S>
                             (m, ProgressiveFixed(hint, left))
                         }
                     }
-                    ProgressiveEOF(hint) => {
+                    ProgressiveEof(hint) => {
                         let ln = inp.len();
                         let m = machine.response_chunk(
                                     &inp[..ln], &mut req, scope);
-                        (m, ProgressiveEOF(hint))
+                        (m, ProgressiveEof(hint))
                     }
                     ProgressiveChunked(hint, off, 0) => {
                         let clen_end = inp[off..end].iter()

@@ -11,7 +11,7 @@ use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport, Exception};
 
 use httparse;
-use shared::headers;
+use shared::{BodyKind, BodyProgress, headers};
 use shared::message::MessageState;
 use shared::{RecvMode, Version};
 use super::{MAX_HEADERS_SIZE, MAX_HEADERS_NUM, MAX_CHUNK_HEAD};
@@ -19,7 +19,6 @@ use super::{Response};
 use super::protocol::{Server};
 use super::context::Context;
 use super::request::Head;
-use super::body::BodyKind;
 use super::response::state;
 
 use self::ErrorCode::*;
@@ -31,19 +30,6 @@ struct ReadBody<M: Server> {
     response: MessageState,
     progress: BodyProgress,
     connection_close: bool,
-}
-
-pub enum BodyProgress {
-    /// Buffered fixed-size request (bytes left)
-    BufferFixed(usize),
-    /// Buffered request with chunked encoding
-    /// (limit, bytes buffered, bytes left for current chunk)
-    BufferChunked(usize, usize, usize),
-    /// Progressive fixed-size request (size hint, bytes left)
-    ProgressiveFixed(usize, u64),
-    /// Progressive with chunked encoding
-    /// (hint, offset, bytes left for current chunk)
-    ProgressiveChunked(usize, usize, u64),
 }
 
 pub struct Parser<M, S>(ParserImpl<M>, PhantomData<*const S>)
@@ -124,21 +110,6 @@ fn start_headers<C: Context, M: Server, S: StreamSocket>(scope: &mut Scope<C>)
           Deadline::now() + scope.byte_timeout()))
 }
 
-fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
-    use super::RecvMode::*;
-    use super::body::BodyKind::*;
-    use self::BodyProgress::*;
-
-    match (mode, body) {
-        // The size of Fixed(x) is checked in parse_headers
-        (Buffered(_), Fixed(y)) => BufferFixed(y as usize),
-        (Buffered(x), Chunked) => BufferChunked(x, 0, 0),
-        (Progressive(x), Fixed(y)) => ProgressiveFixed(x, y),
-        (Progressive(x), Chunked) => ProgressiveChunked(x, 0, 0),
-        (_, Upgrade) => unimplemented!(),
-    }
-}
-
 fn scan_headers(version: Version, headers: &[httparse::Header])
     -> Result<(BodyKind, bool, bool), ()>
 {
@@ -158,7 +129,7 @@ fn scan_headers(version: Version, headers: &[httparse::Header])
     ///    present the request has an empty body
     ///    (6th option in RFC).
     /// 4. In all other cases the request is a bad request.
-    use super::body::BodyKind::*;
+    use super::BodyKind::*;
     let mut has_content_length = false;
     let mut close = version == Version::Http10;
     let mut expect_continue = false;
@@ -276,7 +247,7 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
                 Okay(ReadBody {
                     machine: Some(m),
                     deadline: dline,
-                    progress: start_body(mode, body),
+                    progress: BodyProgress::start(mode, body),
                     response: state,
                     connection_close: close,
                 })
@@ -309,7 +280,7 @@ impl<M: Server> ParserImpl<M>
     {
         use rotor_stream::Expectation::*;
         use self::ParserImpl::*;
-        use self::BodyProgress::*;
+        use shared::BodyProgress::*;
         let (exp, dline) = match self {
             Idle => (Bytes(0), None),
             ReadHeaders => (Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE), None),
@@ -324,7 +295,9 @@ impl<M: Server> ParserImpl<M>
                     ProgressiveChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
                     ProgressiveChunked(hint, off, left)
-                    => Bytes(min(hint as u64, off as u64 +left) as usize)
+                    => Bytes(min(hint as u64, off as u64 +left) as usize),
+                    BufferEof(..) => unreachable!(),
+                    ProgressiveEof(..) => unreachable!(),
                 };
                 (exp, Some(b.deadline))
             }
@@ -357,7 +330,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
         -> Request<Self>
     {
         use self::ParserImpl::*;
-        use self::BodyProgress::*;
+        use shared::BodyProgress::*;
         use self::HeaderResult::*;
         match self.0 {
             Idle => {
@@ -499,6 +472,8 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                             (m, Some(ProgressiveChunked(hint, 0, left)))
                         }
                     }
+                    BufferEof(..) => unreachable!(),
+                    ProgressiveEof(..) => unreachable!(),
                 };
                 match progress {
                     Some(p) => {
@@ -535,7 +510,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
         -> Request<Self>
     {
         use self::ParserImpl::*;
-        use self::BodyProgress::*;
+        use shared::BodyProgress::*;
         use rotor_stream::Exception::*;
         match exc {
             LimitReached => {
