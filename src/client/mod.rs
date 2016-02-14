@@ -24,7 +24,7 @@ pub use self::request::{Request};
 pub use self::protocol::Client;
 pub use self::head::Head;
 pub use self::context::Context;
-pub use recvmode::RecvMode;
+pub use shared::{RecvMode, Version};
 
 use self::parser::Parser;
 

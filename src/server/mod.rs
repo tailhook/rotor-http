@@ -15,7 +15,7 @@ pub use self::response::Response;
 pub use self::context::Context;
 pub use self::protocol::{Server};
 pub use self::parser::Parser;
-pub use recvmode::RecvMode;
+pub use shared::{RecvMode, Version};
 
 // TODO(tailhook) MAX_HEADERS_SIZE can be moved to Context
 // (i.e. made non-constant), but it's more of a problem for MAX_HEADERS_NUM
@@ -36,4 +36,3 @@ pub const MAX_HEADERS_SIZE: usize = 16384;
 /// In unbuffered mode we can process chunk of unlimited size as long as
 /// request handler is able to handle it.
 pub const MAX_CHUNK_HEAD: usize = 128;
-

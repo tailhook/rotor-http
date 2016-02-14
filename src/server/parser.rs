@@ -11,9 +11,9 @@ use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
 use rotor_stream::{Request, Transport, Exception};
 
 use httparse;
-use headers;
-use recvmode::RecvMode;
-use message::{MessageState};
+use shared::headers;
+use shared::message::MessageState;
+use shared::{RecvMode, Version};
 use super::{MAX_HEADERS_SIZE, MAX_HEADERS_NUM, MAX_CHUNK_HEAD};
 use super::{Response};
 use super::protocol::{Server};
@@ -21,7 +21,6 @@ use super::context::Context;
 use super::request::Head;
 use super::body::BodyKind;
 use super::response::state;
-use Version;
 
 use self::ErrorCode::*;
 
@@ -126,7 +125,7 @@ fn start_headers<C: Context, M: Server, S: StreamSocket>(scope: &mut Scope<C>)
 }
 
 fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
-    use recvmode::RecvMode::*;
+    use super::RecvMode::*;
     use super::body::BodyKind::*;
     use self::BodyProgress::*;
 

@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use httparse;
 
 use super::body::BodyKind;
-use Version;
+use super::Version;
 
 
 #[derive(Debug)]

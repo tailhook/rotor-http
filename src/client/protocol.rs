@@ -1,7 +1,7 @@
 use rotor::Scope;
 use rotor_stream::{Deadline};
 
-use recvmode::RecvMode;
+use shared::RecvMode;
 use super::{Head, Request, Context};
 
 

@@ -13,10 +13,9 @@ use super::{Client, Context};
 use super::head::Head;
 use super::request::{Request, state};
 use super::head::BodyKind;
-use message::{MessageState};
-use recvmode::RecvMode;
-use headers;
-use Version;
+use shared::message::{MessageState};
+use shared::{RecvMode, Version};
+use shared::headers;
 
 
 pub enum BodyProgress {
@@ -116,7 +115,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     Ok((result, close))
 }
 fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
-    use recvmode::RecvMode::*;
+    use super::RecvMode::*;
     use super::head::BodyKind::*;
     use self::BodyProgress::*;
 

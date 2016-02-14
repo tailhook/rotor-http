@@ -3,7 +3,7 @@ use std::ascii::AsciiExt;
 
 use rotor_stream::Buf;
 
-use Version;
+use super::Version;
 
 quick_error! {
     #[derive(Debug)]
@@ -414,7 +414,7 @@ impl<'a> Message<'a> {
 mod test {
     use rotor_stream::Buf;
     use super::{Message, MessageState, Body};
-    use Version;
+    use shared::Version;
 
     #[test]
     fn message_size() {

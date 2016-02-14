@@ -20,7 +20,7 @@ pub enum Version {
 
 impl Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Version::*;
+        use shared::Version::*;
         f.write_str(match *self {
             Http10 => "HTTP/1.0",
             Http11 => "HTTP/1.1",
