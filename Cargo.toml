@@ -12,8 +12,8 @@ authors = ["paul@colomiets.name", "pyfisch@gmail.com"]
 
 [dependencies]
 httparse = "1.1"
-rotor = {git="git://github.com/tailhook/rotor", rev="71a9f78"}
-rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="50fd8b9"}
+rotor = {git="git://github.com/tailhook/rotor", rev="08946ce"}
+rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="992d2fb"}
 quick-error = "0.2.1"
 matches = "0.1"
 
