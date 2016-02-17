@@ -2,12 +2,12 @@ extern crate rotor;
 extern crate rotor_http;
 extern crate time;
 
+use std::time::Duration;
 
-use rotor::{Scope, Compose2};
-use rotor_http::{Deadline, ServerFsm};
+use rotor::{Scope, Compose2, Time};
+use rotor_http::{ServerFsm};
 use rotor_http::server::{RecvMode, Server, Head, Response};
 use rotor::mio::tcp::{TcpListener};
-use time::Duration;
 
 
 pub struct Context {
@@ -50,11 +50,11 @@ impl Server for Incr {
     type Context = Context;
     fn headers_received(_head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
-        -> Option<(Self, RecvMode, Deadline)>
+        -> Option<(Self, RecvMode, Time)>
     {
         scope.increment();
         Some((Incr, RecvMode::Buffered(1024),
-            Deadline::now() + Duration::seconds(10)))
+            scope.now() + Duration::new(10, 0)))
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
         _scope: &mut Scope<Context>)
@@ -78,7 +78,7 @@ impl Server for Incr {
     }
 
     fn timeout(self, _response: &mut Response, _scope: &mut Scope<Context>)
-        -> Option<(Self, Deadline)>
+        -> Option<(Self, Time)>
     {
         unimplemented!();
     }
@@ -92,11 +92,11 @@ impl Server for Incr {
 impl Server for Get {
     type Context = Context;
     fn headers_received(_head: Head, _res: &mut Response,
-        _scope: &mut Scope<Context>)
-        -> Option<(Self, RecvMode, Deadline)>
+        scope: &mut Scope<Context>)
+        -> Option<(Self, RecvMode, Time)>
     {
         Some((Get, RecvMode::Buffered(1024),
-            Deadline::now() + Duration::seconds(10)))
+            scope.now() + Duration::new(10, 0)))
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
         scope: &mut Scope<Context>)
@@ -123,7 +123,7 @@ impl Server for Get {
     }
 
     fn timeout(self, _response: &mut Response, _scope: &mut Scope<Context>)
-        -> Option<(Self, Deadline)>
+        -> Option<(Self, Time)>
     {
         unimplemented!();
     }
@@ -142,10 +142,10 @@ fn main() {
         counter: 0,
     });
     loop_inst.add_machine_with(|scope| {
-        ServerFsm::<Incr, _>::new(lst1, scope).map(Compose2::A)
+        ServerFsm::<Incr, _>::new(lst1, scope).wrap(Compose2::A)
     }).unwrap();
     loop_inst.add_machine_with(|scope| {
-        ServerFsm::<Get, _>::new(lst2, scope).map(Compose2::B)
+        ServerFsm::<Get, _>::new(lst2, scope).wrap(Compose2::B)
     }).unwrap();
     loop_inst.run().unwrap();
 }

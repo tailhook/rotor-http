@@ -1,11 +1,11 @@
-use time::Duration;
+use std::time::Duration;
 
 
 pub trait Context {
     fn byte_timeout(&self) -> Duration {
-        Duration::seconds(10)
+        Duration::new(10, 0)
     }
     fn idle_timeout(&self) -> Duration {
-        Duration::seconds(120)
+        Duration::new(120, 0)
     }
 }

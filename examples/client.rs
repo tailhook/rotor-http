@@ -5,12 +5,12 @@ extern crate time;
 use std::io::stdout;
 use std::io::Write;
 use std::net::ToSocketAddrs;
+use std::time::Duration;
 
-use rotor::{Scope};
+use rotor::{Scope, Time};
 use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
 use rotor_http::client::{Context as HttpCtx};
 use rotor_http::Version::Http11;
-use rotor_http::Deadline;
 
 struct Context;
 
@@ -27,8 +27,8 @@ impl Client for Req {
         Some(self)
     }
     fn headers_received(self, head: Head, _request: &mut Request,
-        _scope: &mut Scope<Self::Context>)
-        -> Option<(Self, RecvMode, Deadline)>
+        scope: &mut Scope<Self::Context>)
+        -> Option<(Self, RecvMode, Time)>
     {
         println!("----- Headers -----");
         println!("Status: {} {}", head.code, head.reason);
@@ -36,8 +36,8 @@ impl Client for Req {
             println!("{}: {}", header.name,
                 String::from_utf8_lossy(header.value));
         }
-        Some((self,  RecvMode::Buffered(16386), Deadline::now() +
-            time::Duration::seconds(1000)))
+        Some((self,  RecvMode::Buffered(16386),
+            scope.now() + Duration::new(1000, 0)))
     }
     fn response_received(self, data: &[u8], _request: &mut Request,
         scope: &mut Scope<Self::Context>)
@@ -61,7 +61,7 @@ impl Client for Req {
         unreachable!();
     }
     fn timeout(self, _request: &mut Request, _scope: &mut Scope<Self::Context>)
-        -> Option<(Self, Deadline)>
+        -> Option<(Self, Time)>
     {
         unreachable!();
     }

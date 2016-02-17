@@ -6,9 +6,9 @@ use std::marker::PhantomData;
 
 use rotor::mio::tcp::TcpStream;
 use rotor_stream::MAX_BUF_SIZE;
-use rotor::Scope;
-use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
-use rotor_stream::{Request, Transport, Exception};
+use rotor::{Scope, Time};
+use rotor_stream::{Protocol, StreamSocket};
+use rotor_stream::{Intent, Transport, Exception};
 
 use httparse;
 use headers;
@@ -28,7 +28,7 @@ use self::ErrorCode::*;
 
 struct ReadBody<M: Server> {
     machine: Option<M>,
-    deadline: Deadline,
+    deadline: Time,
     response: MessageState,
     progress: BodyProgress,
     connection_close: bool,
@@ -55,7 +55,7 @@ enum ParserImpl<M: Server> {
     ReadHeaders,
     ReadingBody(ReadBody<M>),
     /// Close connection after buffer is flushed. In other cases -> Idle
-    Processing(M, MessageState, bool, Deadline),
+    Processing(M, MessageState, bool, Time),
     DoneResponse,
 }
 
@@ -67,41 +67,41 @@ pub enum ErrorCode {
 }
 
 impl<M: Server, S: StreamSocket> Parser<M, S> {
-    fn flush(scope: &mut Scope<M::Context>) -> Request<Parser<M, S>>
+    fn flush(scope: &mut Scope<M::Context>) -> Intent<Parser<M, S>>
     {
-        Some((ParserImpl::DoneResponse.wrap(), E::Flush(0),
-              Deadline::now() + scope.byte_timeout()))
+        Intent::of(ParserImpl::DoneResponse.wrap()).expect_flush()
+            .deadline(scope.now() + scope.byte_timeout())
     }
     fn error<'x>(scope: &mut Scope<M::Context>, mut response: Response<'x>,
         code: ErrorCode)
-        -> Request<Parser<M, S>>
+        -> Intent<Parser<M, S>>
     {
         if !response.is_started() {
             scope.emit_error_page(code, &mut response);
         }
         response.finish();
-        Some((ParserImpl::DoneResponse.wrap(), E::Flush(0),
-              Deadline::now() + scope.byte_timeout()))
+        Intent::of(ParserImpl::DoneResponse.wrap()).expect_flush()
+            .deadline(scope.now() + scope.byte_timeout())
     }
     fn raw_error(scope: &mut Scope<M::Context>,
         transport: &mut Transport<<Self as Protocol>::Socket>,
         code: ErrorCode)
-        -> Request<Parser<M, S>>
+        -> Intent<Parser<M, S>>
     {
         let resp = Response::new(transport.output(),
             Version::Http10, false, true);
         Parser::error(scope, resp, code)
     }
     fn complete<'x>(scope: &mut Scope<M::Context>, machine: Option<M>,
-        response: Response<'x>, connection_close: bool, deadline: Deadline)
-        -> Request<Parser<M, S>>
+        response: Response<'x>, connection_close: bool, deadline: Time)
+        -> Intent<Parser<M, S>>
     {
         match machine {
             Some(m) => {
-                Some((ParserImpl::Processing(m, state(response),
+                Intent::of(ParserImpl::Processing(m, state(response),
                         connection_close, deadline)
-                      .wrap(),
-                    E::Sleep, deadline))
+                      .wrap())
+                .sleep().deadline(deadline)
             }
             None => {
                 // TODO(tailhook) probably we should do something better than
@@ -110,7 +110,7 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
                 if connection_close {
                     Parser::flush(scope)
                 } else {
-                    ParserImpl::Idle.request(scope)
+                    ParserImpl::Idle.intent(scope)
                 }
             }
         }
@@ -118,11 +118,11 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
 }
 
 fn start_headers<C: Context, M: Server, S: StreamSocket>(scope: &mut Scope<C>)
-    -> Request<Parser<M, S>>
+    -> Intent<Parser<M, S>>
 {
-    Some((ParserImpl::ReadHeaders.wrap(),
-          E::Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE),
-          Deadline::now() + scope.byte_timeout()))
+    Intent::of(ParserImpl::ReadHeaders.wrap())
+    .expect_delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE)
+    .deadline(scope.now() + scope.byte_timeout())
 }
 
 fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
@@ -305,7 +305,7 @@ impl<M: Server> ParserImpl<M>
     {
         Parser(self, PhantomData)
     }
-    fn request<C, S>(self, scope: &mut Scope<C>) -> Request<Parser<M, S>>
+    fn intent<C, S>(self, scope: &mut Scope<C>) -> Intent<Parser<M, S>>
         where C: Context, S: StreamSocket
     {
         use rotor_stream::Expectation::*;
@@ -334,11 +334,11 @@ impl<M: Server> ParserImpl<M>
             DoneResponse => (Flush(0), None),
         };
 
-        let byte_dline = Deadline::now() + scope.byte_timeout();
+        let byte_dline = scope.now() + scope.byte_timeout();
         let deadline = dline.map_or_else(
             || byte_dline,
             |x| min(byte_dline, x));
-        Some((self.wrap(), exp, deadline))
+        Intent::of(self.wrap()).expect(exp).deadline(deadline)
     }
 }
 
@@ -348,14 +348,14 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
     type Seed = ();
     fn create(_seed: (), _sock: &mut Self::Socket,
         scope: &mut Scope<M::Context>)
-        -> Request<Self>
+        -> Intent<Self>
     {
-        Some((ParserImpl::Idle.wrap(), E::Bytes(1),
-            Deadline::now() + scope.byte_timeout()))
+        Intent::of(ParserImpl::Idle.wrap()).expect_bytes(1)
+            .deadline(scope.now() + scope.byte_timeout())
     }
     fn bytes_read(self, transport: &mut Transport<S>,
                   end: usize, scope: &mut Scope<M::Context>)
-        -> Request<Self>
+        -> Intent<Self>
     {
         use self::ParserImpl::*;
         use self::BodyProgress::*;
@@ -367,14 +367,14 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
             ReadHeaders => {
                 match parse_headers(transport, end, scope) {
                     Okay(body) => {
-                        ReadingBody(body).request(scope)
+                        ReadingBody(body).intent(scope)
                     }
                     NormError(is_head, version, status) => {
                         let mut resp = Response::new(
                             transport.output(), version, is_head, false);
                         scope.emit_error_page(status, &mut resp);
                         if resp.finish() {
-                            Idle.request(scope)
+                            Idle.intent(scope)
                         } else {
                             Parser::flush(scope)
                         }
@@ -387,7 +387,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                         scope.emit_error_page(status, &mut resp);
                         Parser::flush(scope)
                     }
-                    ForceClose => None,
+                    ForceClose => Intent::done(),
                 }
             }
             ReadingBody(rb) => {
@@ -509,31 +509,32 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                             progress: p,
                             response: state(resp),
                             connection_close: rb.connection_close,
-                        }).request(scope)
+                        }).intent(scope)
                     }
                     None => Parser::complete(scope, m, resp,
                         rb.connection_close, rb.deadline)
                 }
             }
             // Spurious event?
-            me @ DoneResponse => me.request(scope),
+            me @ DoneResponse => me.intent(scope),
             Processing(m, r, c, dline) => {
-                Some((Processing(m, r, c, dline).wrap(), E::Sleep, dline))
+                Intent::of(Processing(m, r, c, dline).wrap())
+                    .sleep().deadline(dline)
             }
         }
     }
     fn bytes_flushed(self, _transport: &mut Transport<S>,
                      scope: &mut Scope<Self::Context>)
-        -> Request<Self>
+        -> Intent<Self>
     {
         match self.0 {
-            ParserImpl::DoneResponse => None,
-            me => me.request(scope),
+            ParserImpl::DoneResponse => Intent::done(),
+            me => me.intent(scope),
         }
     }
     fn exception(self, transport: &mut Transport<S>, exc: Exception,
         scope: &mut Scope<Self::Context>)
-        -> Request<Self>
+        -> Intent<Self>
     {
         use self::ParserImpl::*;
         use self::BodyProgress::*;
@@ -567,20 +568,20 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                         Parser::error(scope, resp, BadRequest)
                     }
                     Processing(..) => unreachable!(),
-                    Idle | ReadHeaders | DoneResponse => None,
+                    Idle | ReadHeaders | DoneResponse => Intent::done(),
                 }
             }
-            ReadError(_) => None,
-            WriteError(_) => None,
+            ReadError(_) => Intent::done(),
+            WriteError(_) => Intent::done(),
         }
     }
     fn timeout(self, transport: &mut Transport<S>,
         scope: &mut Scope<Self::Context>)
-        -> Request<Self>
+        -> Intent<Self>
     {
         use self::ParserImpl::*;
         match self.0 {
-            Idle | DoneResponse => None,
+            Idle | DoneResponse => Intent::done(),
             ReadHeaders => {
                 Parser::raw_error(scope, transport, RequestTimeout)
             }
@@ -595,7 +596,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                             progress: rb.progress,
                             response: state(resp),
                             connection_close: rb.connection_close,
-                        }).request(scope)
+                        }).intent(scope)
                     }
                     None => Parser::error(scope, resp, RequestTimeout),
                 }
@@ -613,11 +614,11 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
     }
     fn wakeup(self, transport: &mut Transport<S>,
         scope: &mut Scope<Self::Context>)
-        -> Request<Self>
+        -> Intent<Self>
     {
         use self::ParserImpl::*;
         match self.0 {
-            me@Idle | me@ReadHeaders | me@DoneResponse => me.request(scope),
+            me@Idle | me@ReadHeaders | me@DoneResponse => me.intent(scope),
             ReadingBody(rb) => {
                 let mut resp = rb.response.with(transport.output());
                 let m = rb.machine.and_then(|m| m.wakeup(&mut resp, scope));
@@ -627,7 +628,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                     progress: rb.progress,
                     response: state(resp),
                     connection_close: rb.connection_close,
-                }).request(scope)
+                }).intent(scope)
             }
             Processing(m, respimp, close, dline) => {
                 let mut resp = respimp.with(transport.output());
@@ -642,8 +643,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
 mod test {
     use std::io::{self, Read, Write};
     use rotor::mio::{Evented, Token, Selector};
-    use rotor::{Scope, EventSet, PollOpt};
-    use rotor_stream::Deadline;
+    use rotor::{Scope, EventSet, PollOpt, Time};
     use super::Parser;
     use super::super::{Server, Head, Response, RecvMode};
 
@@ -654,7 +654,7 @@ mod test {
         type Context = ();
         fn headers_received(_head: Head, _response: &mut Response,
             _scope: &mut Scope<Self::Context>)
-            -> Option<(Self, RecvMode, Deadline)>
+            -> Option<(Self, RecvMode, Time)>
         { unimplemented!(); }
         fn request_received(self, _data: &[u8], _response: &mut Response,
             _scope: &mut Scope<Self::Context>) -> Option<Self>
@@ -666,7 +666,7 @@ mod test {
             _scope: &mut Scope<Self::Context>) -> Option<Self>
         { unimplemented!(); }
         fn timeout(self, _response: &mut Response,
-            _scope: &mut Scope<Self::Context>) -> Option<(Self, Deadline)>
+            _scope: &mut Scope<Self::Context>) -> Option<(Self, Time)>
         { unimplemented!(); }
         fn wakeup(self, _response: &mut Response,
             _scope: &mut Scope<Self::Context>) -> Option<Self>
@@ -697,6 +697,6 @@ mod test {
     #[test]
     fn parser_size() {
         // Just to keep track of size of structure
-        assert_eq!(::std::mem::size_of::<Parser<Proto, MockStream>>(), 104);
+        assert_eq!(::std::mem::size_of::<Parser<Proto, MockStream>>(), 96);
     }
 }

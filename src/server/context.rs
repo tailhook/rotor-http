@@ -1,4 +1,4 @@
-use time::Duration;
+use std::time::Duration;
 
 use super::Response;
 use super::parser::ErrorCode;
@@ -24,7 +24,7 @@ pub trait Context {
         response.done();
     }
     fn byte_timeout(&self) -> Duration {
-        Duration::seconds(10)
+        Duration::new(10, 0)
     }
 }
 

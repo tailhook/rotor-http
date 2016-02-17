@@ -2,9 +2,9 @@ use std::marker::PhantomData;
 use std::str::from_utf8;
 use std::cmp::min;
 
-use rotor::Scope;
-use rotor_stream::{Protocol, StreamSocket, Deadline, Expectation as E};
-use rotor_stream::{Request as Task, Transport};
+use rotor::{Scope, Time};
+use rotor_stream::{Protocol, StreamSocket};
+use rotor_stream::{Intent, Expectation as E, Transport};
 use rotor_stream::Buf;
 use httparse;
 
@@ -49,7 +49,7 @@ enum ParserImpl<M: Client> {
     Response {
         progress: BodyProgress,
         machine: M,
-        deadline: Deadline,
+        deadline: Time,
         request: MessageState,
     },
     Idle,
@@ -187,14 +187,15 @@ fn parse_headers<M>(buffer: &mut Buf, end: usize,
 
 impl<M: Client, S: StreamSocket> Parser<M, S> {
     fn finish(req: Request, scope: &mut Scope<M::Context>)
-        -> Task<Parser<M, S>>
+        -> Intent<Parser<M, S>>
     {
         if req.is_complete() {
-            return ParserImpl::Idle.request(scope);
+            return ParserImpl::Idle.intent(scope);
         } else {
             // Response is done before request is sent fully, let's close
             // the connectoin
-            return None;
+            // TODO(tailhook) should we return an error?
+            return Intent::done();
         }
     }
 }
@@ -204,7 +205,7 @@ impl<M: Client> ParserImpl<M> {
     {
         Parser(self, PhantomData)
     }
-    fn request<C, S>(self, scope: &mut Scope<C>) -> Task<Parser<M, S>>
+    fn intent<C, S>(self, scope: &mut Scope<C>) -> Intent<Parser<M, S>>
         where C: Context, S: StreamSocket
     {
         use rotor_stream::Expectation::*;
@@ -212,10 +213,10 @@ impl<M: Client> ParserImpl<M> {
         use self::BodyProgress::*;
         let (exp, dline) = match self {
             WriteRequest(..) => (E::Flush(0),
-                                 Some(Deadline::now() + scope.byte_timeout())),
+                                 Some(scope.now() + scope.byte_timeout())),
             ReadHeaders {..} => (
                         E::Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE),
-                        Some(Deadline::now() + scope.byte_timeout())),
+                        Some(scope.now() + scope.byte_timeout())),
             Response { ref progress, ref deadline, .. } => {
                 let exp = match *progress {
                     BufferFixed(x) => Bytes(x),
@@ -234,16 +235,16 @@ impl<M: Client> ParserImpl<M> {
                 (exp, Some(*deadline))
             }
             Idle => {
-                return Some((self.wrap(), Sleep,
-                    Deadline::now() + scope.idle_timeout()));
+                return Intent::of(self.wrap()).sleep()
+                    .deadline(scope.now() + scope.idle_timeout());
             }
         };
 
-        let byte_dline = Deadline::now() + scope.byte_timeout();
+        let byte_dline = scope.now() + scope.byte_timeout();
         let deadline = dline.map_or_else(
             || byte_dline,
             |x| min(byte_dline, x));
-        Some((self.wrap(), exp, deadline))
+        Intent::of(self.wrap()).expect(exp).deadline(deadline)
     }
 }
 
@@ -255,16 +256,14 @@ impl<M, S> Protocol for Parser<M, S>
     type Seed = M;
     fn create(seed: Self::Seed, _sock: &mut Self::Socket,
         scope: &mut Scope<Self::Context>)
-        -> Task<Self>
+        -> Intent<Self>
     {
-        Some((ParserImpl::WriteRequest(seed).wrap(),
-            E::Flush(0), // Become writable
-            Deadline::now() + scope.byte_timeout()))
-
+        Intent::of(ParserImpl::WriteRequest(seed).wrap())
+            .expect_flush().deadline(scope.now() + scope.byte_timeout())
     }
     fn bytes_read(self, transport: &mut Transport<Self::Socket>,
         end: usize, scope: &mut Scope<Self::Context>)
-        -> Task<Self>
+        -> Intent<Self>
     {
         use self::ParserImpl::*;
         use self::BodyProgress::*;
@@ -276,8 +275,8 @@ impl<M, S> Protocol for Parser<M, S>
                 let hdr = parse_headers(inb, end, machine,
                     request.with(outb), is_head, scope);
                 match hdr {
-                    Ok(me) => me.request(scope),
-                    Err(()) => None, // Close the connection
+                    Ok(me) => me.intent(scope),
+                    Err(()) => Intent::done(), // Close the connection
                 }
             }
             Response { progress, machine, deadline, request }  => {
@@ -309,7 +308,7 @@ impl<M, S> Protocol for Parser<M, S>
                                 if off as u64 + chunk_len > limit as u64 {
                                     inp.consume(end+2);
                                     machine.bad_response(scope);
-                                    return None;
+                                    return Intent::done();
                                 }
                                 inp.remove_range(off..end+2);
                                 (Some(machine),
@@ -318,7 +317,7 @@ impl<M, S> Protocol for Parser<M, S>
                             None => {
                                 inp.consume(end+2);
                                 machine.bad_response(scope);
-                                return None;
+                                return Intent::done();
                             }
                         }
                     }
@@ -368,7 +367,7 @@ impl<M, S> Protocol for Parser<M, S>
                             None => {
                                 inp.consume(end+2);
                                 machine.bad_response(scope);
-                                return None;
+                                return Intent::done();
                             }
                         }
                     }
@@ -387,26 +386,26 @@ impl<M, S> Protocol for Parser<M, S>
                     }
                 };
                 match m {
-                    None => None,
+                    None => Intent::done(),
                     Some(m) => {
                         Response {
                             machine: m,
                             deadline: deadline,
                             progress: progress,
                             request: state(req),
-                        }.request(scope)
+                        }.intent(scope)
                     }
                 }
             }
             Idle => {
-                Some((Idle.wrap(),
-                      E::Sleep, Deadline::now() + scope.idle_timeout()))
+                Intent::of(Idle.wrap()).sleep()
+                      .deadline(scope.now() + scope.idle_timeout())
             }
         }
     }
     fn bytes_flushed(self, transport: &mut Transport<Self::Socket>,
         scope: &mut Scope<Self::Context>)
-        -> Task<Self>
+        -> Intent<Self>
     {
         use self::ParserImpl::*;
         match self.0 {
@@ -414,13 +413,13 @@ impl<M, S> Protocol for Parser<M, S>
                 let mut req = Request::new(transport.output());
                 match m.prepare_request(&mut req) {
                     Some(m) => {
-                        Some((Parser(ReadHeaders {
+                        Intent::of(Parser(ReadHeaders {
                                 machine: m,
                                 is_head: req.1,
                                 request: state(req),
-                            }, PhantomData),
-                        E::Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE),
-                        Deadline::now() + scope.byte_timeout()))
+                            }, PhantomData))
+                        .expect_delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE)
+                        .deadline(scope.now() + scope.byte_timeout())
                     }
                     None => unimplemented!(),
                 }
@@ -430,20 +429,20 @@ impl<M, S> Protocol for Parser<M, S>
                 unimplemented!();
             }
             Idle => {
-                Some((Parser(Idle, PhantomData),
-                      E::Sleep, Deadline::now() + scope.idle_timeout()))
+                Intent::of(Parser(Idle, PhantomData)).sleep()
+                .deadline(scope.now() + scope.idle_timeout())
             }
         }
     }
     fn timeout(self, _transport: &mut Transport<Self::Socket>,
         _scope: &mut Scope<Self::Context>)
-        -> Task<Self>
+        -> Intent<Self>
     {
         unimplemented!();
     }
     fn wakeup(self, _transport: &mut Transport<Self::Socket>,
         _scope: &mut Scope<Self::Context>)
-        -> Task<Self>
+        -> Intent<Self>
     {
         unimplemented!();
     }

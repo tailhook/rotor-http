@@ -8,11 +8,11 @@ extern crate libc;
 use std::env;
 use std::thread;
 use std::os::unix::io::AsRawFd;
+use std::time::Duration;
 
-use rotor::Scope;
-use rotor_http::{Deadline, ServerFsm};
+use rotor::{Scope, Time};
+use rotor_http::{ServerFsm};
 use rotor_http::server::{RecvMode, Server, Head, Response};
-use time::Duration;
 
 
 struct Context {
@@ -32,7 +32,7 @@ impl Counter for Context {
 impl rotor_http::server::Context for Context {
     // default impl is okay
     fn byte_timeout(&self) -> Duration {
-        Duration::seconds(1000)
+        Duration::new(1000, 0)
     }
 }
 
@@ -57,7 +57,7 @@ impl Server for HelloWorld {
     type Context = Context;
     fn headers_received(head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
-        -> Option<(Self, RecvMode, Deadline)>
+        -> Option<(Self, RecvMode, Time)>
     {
         use self::HelloWorld::*;
         scope.increment();
@@ -67,7 +67,7 @@ impl Server for HelloWorld {
             p if p.starts_with('/') => HelloName(p[1..].to_string()),
             _ => PageNotFound
         }, RecvMode::Buffered(1024),
-            Deadline::now() + Duration::seconds(10)))
+            scope.now() + Duration::new(10, 0)))
     }
     fn request_received(self, _data: &[u8], res: &mut Response,
         scope: &mut Scope<Context>)
@@ -113,7 +113,7 @@ impl Server for HelloWorld {
     }
 
     fn timeout(self, _response: &mut Response, _scope: &mut Scope<Context>)
-        -> Option<(Self, Deadline)>
+        -> Option<(Self, Time)>
     {
         unimplemented!();
     }

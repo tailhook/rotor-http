@@ -7,10 +7,9 @@
 //! Also DNS resolving is not implemented yet.
 //!
 
-use std::error::Error;
 use std::net::SocketAddr;
 
-use rotor::{Scope};
+use rotor::{Scope, Response, Void};
 use rotor::mio::tcp::TcpStream;
 use rotor_stream::{Stream};
 
@@ -52,8 +51,11 @@ pub type Fsm<P, S> = Stream<Parser<P, S>>;
 
 pub fn connect_tcp<P:Client>(scope: &mut Scope<P::Context>,
     addr: &SocketAddr, req: P)
-    -> Result<Fsm<P, TcpStream>, Box<Error>>
+    -> Response<Fsm<P, TcpStream>, Void>
 {
-    let sock = try!(TcpStream::connect(&addr));
+    let sock = match TcpStream::connect(&addr) {
+        Ok(sock) => sock,
+        Err(e) => return Response::error(Box::new(e)),
+    };
     Stream::new(sock, req, scope)
 }

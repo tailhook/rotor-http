@@ -1,5 +1,4 @@
-use rotor::Scope;
-use rotor_stream::{Deadline};
+use rotor::{Scope, Time};
 
 use recvmode::RecvMode;
 use super::{Head, Request, Context};
@@ -53,7 +52,7 @@ pub trait Client: Sized {
     /// somewhere.
     fn headers_received(self, head: Head, request: &mut Request,
         scope: &mut Scope<Self::Context>)
-        -> Option<(Self, RecvMode, Deadline)>;
+        -> Option<(Self, RecvMode, Time)>;
 
     /// Called when full response is received in buffered mode
     ///
@@ -107,7 +106,7 @@ pub trait Client: Sized {
     /// Unless you've returned the new timeout connection will be closed after
     /// the event.
     fn timeout(self, request: &mut Request, scope: &mut Scope<Self::Context>)
-        -> Option<(Self, Deadline)>;
+        -> Option<(Self, Time)>;
     fn wakeup(self, request: &mut Request, scope: &mut Scope<Self::Context>)
         -> Option<Self>;
 }
