@@ -13,8 +13,8 @@ authors = ["paul@colomiets.name", "pyfisch@gmail.com"]
 [dependencies]
 httparse = "1.1"
 time = "0.1"
-rotor = "0.5.1"
-rotor-stream = "0.4.0"
+rotor = {git="git://github.com/tailhook/rotor", rev="71a9f78"}
+rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="50fd8b9"}
 quick-error = "0.2.1"
 matches = "0.1"
 
