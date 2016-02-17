@@ -1,6 +1,5 @@
 extern crate rotor;
 extern crate rotor_http;
-extern crate time;
 
 use std::time::Duration;
 

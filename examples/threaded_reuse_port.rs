@@ -1,7 +1,6 @@
 extern crate rotor;
 extern crate rotor_http;
 extern crate net2;
-extern crate time;
 extern crate libc;
 
 
