@@ -319,7 +319,7 @@ impl<M: Server> ParserImpl<M>
                     BufferFixed(x) => Bytes(x),
                     BufferChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
-                    BufferChunked(_, off, y) => Bytes(off + y),
+                    BufferChunked(_, off, y) => Bytes(off + y + 2),
                     ProgressiveFixed(hint, left)
                     => Bytes(min(hint as u64, left) as usize),
                     ProgressiveChunked(_, off, 0)
@@ -402,21 +402,17 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                         (m, None)
                     }
                     BufferChunked(limit, off, 0) => {
-                        let clen_end = inp[off..end].iter()
-                            .position(|&x| x == b';')
-                            .map_or(end, |x| x + off);
-                        let val_opt = from_utf8(&inp[off..clen_end]).ok()
-                            .and_then(|x| u64::from_str_radix(x, 16).ok());
-                        match val_opt {
-                            Some(0) => {
-                                inp.remove_range(off..end+2);
+                        use httparse::Status::*;
+                        match httparse::parse_chunk_size(&inp[off..off+end+2]) {
+                            Ok(Complete((_, 0))) => {
+                                inp.remove_range(off..off+end+2);
                                 let m = rb.machine.and_then(
                                     |m| m.request_received(
                                         &inp[..off], &mut resp, scope));
                                 inp.consume(off);
                                 (m, None)
                             }
-                            Some(chunk_len) => {
+                            Ok(Complete((_, chunk_len))) => {
                                 if off as u64 + chunk_len > limit as u64 {
                                     inp.consume(end+2);
                                     rb.machine.map(
@@ -429,7 +425,8 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                                     Some(BufferChunked(limit, off,
                                                   chunk_len as usize)))
                             }
-                            None => {
+                            Ok(Partial) => unreachable!(),
+                            Err(_) => {
                                 inp.consume(end+2);
                                 rb.machine.map(
                                     |m| m.bad_request(&mut resp, scope));
@@ -439,7 +436,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                         }
                     }
                     BufferChunked(limit, off, bytes) => {
-                        debug_assert!(bytes == end);
+                        debug_assert!(bytes == end - 2);
                         (rb.machine, Some(BufferChunked(limit, off+bytes, 0)))
                     }
                     ProgressiveFixed(hint, mut left) => {
@@ -458,13 +455,9 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                         }
                     }
                     ProgressiveChunked(hint, off, 0) => {
-                        let clen_end = inp[off..end].iter()
-                            .position(|&x| x == b';')
-                            .map_or(end, |x| x + off);
-                        let val_opt = from_utf8(&inp[off..clen_end]).ok()
-                            .and_then(|x| u64::from_str_radix(x, 16).ok());
-                        match val_opt {
-                            Some(0) => {
+                        use httparse::Status::*;
+                        match httparse::parse_chunk_size(&inp[off..off+end+2]) {
+                            Ok(Complete((_, 0))) => {
                                 inp.remove_range(off..end+2);
                                 let m = rb.machine.and_then(
                                     |m| m.request_received(
@@ -472,13 +465,14 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                                 inp.consume(off);
                                 (m, None)
                             }
-                            Some(chunk_len) => {
+                            Ok(Complete((_, chunk_len))) => {
                                 inp.remove_range(off..end+2);
                                 (rb.machine,
                                     Some(ProgressiveChunked(hint, off,
                                                   chunk_len)))
                             }
-                            None => {
+                            Ok(Partial) => unreachable!(),
+                            Err(_) => {
                                 inp.consume(end+2);
                                 rb.machine.map(
                                     |m| m.bad_request(&mut resp, scope));
@@ -487,6 +481,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                         }
                     }
                     ProgressiveChunked(hint, off, mut left) => {
+                        println!("Reading progressive chunked");
                         let ln = min(off as u64 + left, inp.len() as u64) as usize;
                         left -= (ln - off) as u64;
                         if ln < hint {
