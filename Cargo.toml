@@ -20,6 +20,7 @@ matches = "0.1"
 [dev-dependencies]
 libc = "0.1"
 net2 = "0.2"
+rotor-test = {git="git://github.com/tailhook/rotor-test", rev="44ffbab"}
 
 [lib]
 name = "rotor_http"

@@ -636,14 +636,12 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
 
 #[cfg(test)]
 mod test {
-    use std::io::{self, Read, Write};
-    use rotor::mio::{Evented, Token, Selector};
-    use rotor::{Scope, EventSet, PollOpt, Time};
+    use rotor_test::{MemIo};
+    use rotor::{Scope, Time};
     use super::Parser;
     use super::super::{Server, Head, Response, RecvMode};
 
     struct Proto(usize);
-    struct MockStream;
 
     impl Server for Proto {
         type Context = ();
@@ -668,30 +666,11 @@ mod test {
         { unimplemented!(); }
     }
 
-    impl Read for MockStream {
-        fn read(&mut self, _: &mut [u8]) -> io::Result<usize>
-        { unimplemented!() }
-    }
-    impl Write for MockStream {
-        fn write(&mut self, _: &[u8]) -> io::Result<usize>
-        { unimplemented!() }
-        fn flush(&mut self) -> io::Result<()> { Ok(()) }
-    }
-    impl Evented for MockStream {
-        fn register(&self, _selector: &mut Selector,
-            _token: Token, _interest: EventSet, _opts: PollOpt)
-            -> io::Result<()>
-        { unimplemented!() }
-        fn reregister(&self, _selector: &mut Selector, _token: Token,
-            _interest: EventSet, _opts: PollOpt) -> io::Result<()>
-        { unimplemented!() }
-        fn deregister(&self, _selector: &mut Selector) -> io::Result<()>
-        { unimplemented!() }
-    }
-
     #[test]
     fn parser_size() {
         // Just to keep track of size of structure
-        assert_eq!(::std::mem::size_of::<Parser<Proto, MockStream>>(), 96);
+        assert_eq!(::std::mem::size_of::<Parser<Proto, MemIo>>(), 96);
     }
+
+
 }
