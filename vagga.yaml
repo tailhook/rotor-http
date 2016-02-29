@@ -13,6 +13,8 @@ commands:
   test: !Command
     description: Run unit tests
     container: ubuntu
+    environ:
+      RUST_BACKTRACE: 1
     run: [cargo, test]
 
 containers:

@@ -12,15 +12,15 @@ authors = ["paul@colomiets.name", "pyfisch@gmail.com"]
 
 [dependencies]
 httparse = "1.1"
-rotor = {git="git://github.com/tailhook/rotor", rev="08946ce"}
-rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="992d2fb"}
+rotor = {git="git://github.com/tailhook/rotor", rev="d001aa3"}
+rotor-stream = {git="git://github.com/tailhook/rotor-stream", rev="c126fa2"}
 quick-error = "0.2.1"
 matches = "0.1"
 
 [dev-dependencies]
 libc = "0.1"
 net2 = "0.2"
-rotor-test = {git="git://github.com/tailhook/rotor-test", rev="44ffbab"}
+rotor-test = {git="git://github.com/tailhook/rotor-test", rev="04756a0"}
 
 [lib]
 name = "rotor_http"
