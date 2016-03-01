@@ -131,7 +131,7 @@ fn start_headers<C: Context, M: Server, S: StreamSocket>(scope: &mut Scope<C>)
     -> Intent<Parser<M, S>>
 {
     Intent::of(ParserImpl::ReadHeaders(0).wrap())
-    .expect_delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE)
+    .expect_bytes(1)
     .deadline(scope.now() + scope.byte_timeout())
 }
 
@@ -224,26 +224,26 @@ enum HeaderResult<M: Server> {
 //
 // On error returns bool, which is true if keep-alive connection can be
 // carried on.
-fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
+fn parse_headers<S, M>(transport: &mut Transport<S>,
     scope: &mut Scope<M::Context>) -> HeaderResult<M>
     where M: Server, S: StreamSocket,
 {
     use self::HeaderResult::*;
     let client = Any::downcast_ref::<TcpStream>(transport.socket())
         .and_then(|x| x.peer_addr().ok());
-    let result = {
+    let (result, bytes) = {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS_NUM];
         let (input, output) = transport.buffers();
-        let (version, method, path, headers) = {
+        let (version, method, path, headers, bytes) = {
             let mut raw = httparse::Request::new(&mut headers);
-            match raw.parse(&input[..end+4]) {
-                Ok(httparse::Status::Complete(x)) => {
-                    debug_assert!(x == end+4);
+            match raw.parse(&input[..]) {
+                Ok(httparse::Status::Complete(bytes)) => {
                     (if raw.version.unwrap() == 1 { Version::Http11 }
                              else { Version::Http10 },
                      raw.method.unwrap(),
                      raw.path.unwrap(),
-                     raw.headers)
+                     raw.headers,
+                     bytes)
                 }
                 Ok(..) => {
                     return Incomplete;
@@ -275,7 +275,7 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
             (M::headers_received(head, &mut res, scope),
              state(res))
         };
-        match (head_result, body) {
+        let result = match (head_result, body) {
             (Some((_, RecvMode::Buffered(x), _)), _) if x >= MAX_BUF_SIZE
             => panic!("Can't buffer {} bytes, max {}", x, MAX_BUF_SIZE),
             (Some((_, RecvMode::Buffered(y), _)), BodyKind::Fixed(x))
@@ -306,9 +306,10 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
                     NormError(is_head, version, BadRequest)
                 }
             }
-        }
+        };
+        (result, bytes)
     };
-    transport.input().consume(end+4);
+    transport.input().consume(bytes);
     result
 }
 
@@ -388,7 +389,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                 start_headers(scope)
             }
             ReadHeaders(x) => {
-                match parse_headers(transport, end, scope) {
+                match parse_headers(transport, scope) {
                     Okay(body) => {
                         ReadingBody(body).intent(scope)
                     }
@@ -943,7 +944,6 @@ mod test {
     // It is directly supported by httparse and some websites
     // (eg. Github API Errors) and clients use this.
     #[test]
-    #[should_panic]
     fn test_newline_delimited() {
         let mut io = MemIo::new();
         let mut lp = MockLoop::new(Default::default());
@@ -965,7 +965,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
     fn test_pipelining() {
         let mut io = MemIo::new();
         let mut lp = MockLoop::new(Default::default());
@@ -1017,7 +1016,6 @@ mod test {
 
     // FIXME: causes assertion failure
     #[test]
-    #[should_panic]
     fn test_broken_http() {
         let mut io = MemIo::new();
         let mut lp = MockLoop::new(Default::default());
