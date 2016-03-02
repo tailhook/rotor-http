@@ -394,7 +394,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                         ReadingBody(body).intent(scope)
                     }
                     Incomplete => {
-                        ReadHeaders(x+1).intent(scope)
+                        ReadHeaders(transport.input().len()+1).intent(scope)
                     }
                     NormError(is_head, version, status) => {
                         let mut resp = Response::new(
