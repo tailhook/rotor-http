@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 
 use rotor::{Scope, Response, Void};
 use rotor::mio::tcp::TcpStream;
-use rotor_stream::{Stream};
+use rotor_stream;
 
 mod request;
 mod head;
@@ -47,7 +47,10 @@ pub const MAX_HEADERS_SIZE: usize = 16384;
 /// request handler is able to handle it.
 pub const MAX_CHUNK_HEAD: usize = 128;
 
-pub type Fsm<P, S> = Stream<Parser<P, S>>;
+/// A state machine for ad-hoc requests
+pub type Fsm<P, S> = rotor_stream::Stream<Parser<P, S>>;
+/// A state machine for persistent connections
+pub type Persistent<P, S> = rotor_stream::Persistent<Parser<P, S>>;
 
 pub fn connect_tcp<P:Client>(scope: &mut Scope<P::Context>,
     addr: &SocketAddr, req: P)
@@ -57,5 +60,5 @@ pub fn connect_tcp<P:Client>(scope: &mut Scope<P::Context>,
         Ok(sock) => sock,
         Err(e) => return Response::error(Box::new(e)),
     };
-    Stream::new(sock, req, scope)
+    rotor_stream::Stream::new(sock, req, scope)
 }
