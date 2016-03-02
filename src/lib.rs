@@ -1,3 +1,6 @@
+#![feature(test)]
+
+extern crate test;
 extern crate rotor;
 extern crate httparse;
 extern crate rotor_stream;

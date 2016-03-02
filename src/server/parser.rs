@@ -56,7 +56,7 @@ pub struct Parser<M, S>(ParserImpl<M>, PhantomData<*const S>)
 #[derive(Debug)]
 enum ParserImpl<M: Server> {
     Idle,
-    ReadHeaders,
+    ReadHeaders(usize),
     ReadingBody(ReadBody<M>),
     /// Close connection after buffer is flushed. In other cases -> Idle
     Processing(M, MessageState, bool, Time),
@@ -130,7 +130,7 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
 fn start_headers<C: Context, M: Server, S: StreamSocket>(scope: &mut Scope<C>)
     -> Intent<Parser<M, S>>
 {
-    Intent::of(ParserImpl::ReadHeaders.wrap())
+    Intent::of(ParserImpl::ReadHeaders(0).wrap())
     .expect_delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE)
     .deadline(scope.now() + scope.byte_timeout())
 }
@@ -214,6 +214,7 @@ fn scan_headers(version: Version, headers: &[httparse::Header])
 
 enum HeaderResult<M: Server> {
     Okay(ReadBody<M>),
+    Incomplete,
     NormError(bool, Version, ErrorCode),
     FatalError(ErrorCode),
     ForceClose,
@@ -244,7 +245,9 @@ fn parse_headers<S, M>(transport: &mut Transport<S>, end: usize,
                      raw.path.unwrap(),
                      raw.headers)
                 }
-                Ok(_) => unreachable!(),
+                Ok(..) => {
+                    return Incomplete;
+                }
                 Err(_) => {
                     return FatalError(BadRequest);
                 }
@@ -331,7 +334,7 @@ impl<M: Server> ParserImpl<M>
         use self::BodyProgress::*;
         let (exp, dline) = match self {
             Idle => (Bytes(0), None),
-            ReadHeaders => (Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE), None),
+            ReadHeaders(x) => (Bytes(x+1), None),
             ReadingBody(ref b) => {
                 let exp = match *&b.progress {
                     BufferFixed(x) => Bytes(x),
@@ -384,10 +387,13 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
             Idle => {
                 start_headers(scope)
             }
-            ReadHeaders => {
+            ReadHeaders(x) => {
                 match parse_headers(transport, end, scope) {
                     Okay(body) => {
                         ReadingBody(body).intent(scope)
+                    }
+                    Incomplete => {
+                        ReadHeaders(x+1).intent(scope)
                     }
                     NormError(is_head, version, status) => {
                         let mut resp = Response::new(
@@ -576,7 +582,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
         match exc {
             LimitReached => {
                 match self.0 {
-                    ReadHeaders => {
+                    ReadHeaders(..) => {
                         Parser::raw_error(scope, transport,
                             RequestHeaderFieldsTooLarge)
                     }
@@ -602,7 +608,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
                         Parser::error(scope, resp, BadRequest)
                     }
                     Processing(..) => unreachable!(),
-                    Idle | ReadHeaders | DoneResponse => Intent::done(),
+                    Idle | ReadHeaders(..) | DoneResponse => Intent::done(),
                 }
             }
             ReadError(_) => Intent::done(),
@@ -616,7 +622,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
         use self::ParserImpl::*;
         match self.0 {
             Idle | DoneResponse => Intent::done(),
-            ReadHeaders => {
+            ReadHeaders(..) => {
                 Parser::raw_error(scope, transport, RequestTimeout)
             }
             ReadingBody(rb) => {
@@ -652,7 +658,7 @@ impl<S: StreamSocket, M: Server> Protocol for Parser<M, S> {
     {
         use self::ParserImpl::*;
         match self.0 {
-            me@Idle | me@ReadHeaders | me@DoneResponse => me.intent(scope),
+            me@Idle | me@ReadHeaders(..) | me@DoneResponse => me.intent(scope),
             ReadingBody(rb) => {
                 let mut resp = rb.response.with(transport.output());
                 let m = rb.machine.and_then(|m| m.wakeup(&mut resp, scope));
@@ -678,6 +684,7 @@ mod test {
     use std::default::Default;
     use std::time::Duration;
     use std::str::from_utf8;
+    use test::Bencher;
     use rotor_test::{MemIo, MockLoop};
     use rotor_stream::{Stream, Accepted};
     use rotor::{Scope, Time, EventSet, Machine};
@@ -685,7 +692,7 @@ mod test {
     use super::super::{Server, Head, Response, RecvMode};
 
     #[derive(Debug, PartialEq, Eq, Default)]
-    struct Context {
+    pub struct Context {
         progressive: bool,
         headers_received: usize,
         chunks_received: usize,
@@ -1036,6 +1043,84 @@ mod test {
             body: String::from(""),
             chunks_received: 0,
             requests_received: 1,
+        });
+    }
+
+    #[bench]
+    fn bench_parse1(b: &mut Bencher) {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        let mut counter = 0;
+        b.iter(|| {
+            counter += 1;
+            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(
+                io.clone(), &mut lp.scope(1)).expect_machine();
+            io.push_bytes("GET / HTTP/1.1\r\n");
+            io.push_bytes("Host: blog.nemo.org\r\n");
+            io.push_bytes("User-Agent: Mozilla/5.0 (X11; Linux x86_64");
+            io.push_bytes("; rv:44.0) Gecko/20100101 Firefox/44.0\r\n\
+            Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n");
+            io.push_bytes("Accept-Language: de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4,fr;q=0.2\r\n\
+            Accept-Encoding: gzip, ");
+            io.push_bytes("deflate\r\n\
+            DNT: 1\r\n\
+            Cookie: spam=foo.bar\r\n\
+            Connection: keep-alive\r\n\
+            If-Modified-Since: Tue, 01 Mar 2016 19:40:42 GMT\r\n");
+            io.push_bytes("Cache-Control: max-age=0\r\n\r\n");
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+        });
+        assert_eq!(*lp.ctx(), Context {
+            progressive: false,
+            headers_received: counter,
+            body: String::from(""),
+            chunks_received: 0,
+            requests_received: counter,
+        });
+    }
+
+    #[bench]
+    fn bench_parse6(b: &mut Bencher) {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        let mut counter = 0;
+        b.iter(|| {
+            counter += 1;
+            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(
+                io.clone(), &mut lp.scope(1)).expect_machine();
+            io.push_bytes("GET / HTTP/1.1\r\n");
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            io.push_bytes("Host: blog.nemo.org\r\n");
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            io.push_bytes("User-Agent: Mozilla/5.0 (X11; Linux x86_64");
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            io.push_bytes("; rv:44.0) Gecko/20100101 Firefox/44.0\r\n\
+            Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n");
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            io.push_bytes("Accept-Language: de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4,fr;q=0.2\r\n\
+            Accept-Encoding: gzip, ");
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            io.push_bytes("deflate\r\n\
+            DNT: 1\r\n\
+            Cookie: spam=foo.bar\r\n\
+            Connection: keep-alive\r\n\
+            If-Modified-Since: Tue, 01 Mar 2016 19:40:42 GMT\r\n");
+            m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+            io.push_bytes("Cache-Control: max-age=0\r\n\r\n");
+            m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
+        });
+        assert_eq!(*lp.ctx(), Context {
+            progressive: false,
+            headers_received: counter,
+            body: String::from(""),
+            chunks_received: 0,
+            requests_received: counter,
         });
     }
 
