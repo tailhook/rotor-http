@@ -685,7 +685,7 @@ mod test {
     use super::super::{Server, Head, Response, RecvMode};
 
     #[derive(Debug, PartialEq, Eq, Default)]
-    struct Context {
+    pub struct Context {
         progressive: bool,
         headers_received: usize,
         chunks_received: usize,
