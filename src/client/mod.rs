@@ -20,7 +20,7 @@ mod parser;
 mod connection;
 
 pub use self::request::{Request};
-pub use self::protocol::{Client, Requester};
+pub use self::protocol::{Client, Requester, Task};
 pub use self::head::Head;
 pub use recvmode::RecvMode;
 

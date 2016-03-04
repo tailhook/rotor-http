@@ -6,6 +6,12 @@ use recvmode::RecvMode;
 use super::{Head, Request};
 use super::{Connection};
 
+pub enum Task<M: Client> {
+    Sleep(M, Time),
+    Request(M, M::Requester),
+    Close,
+}
+
 /// A state machine that allows to initiate a client-side HTTP request
 ///
 /// Used for all versions of HTTP.
@@ -24,24 +30,31 @@ pub trait Client: Sized {
     fn connection_idle(self,
         connection: &Connection,
         scope: &mut Scope<<Self::Requester as Requester>::Context>)
-        -> Option<(Self, Option<Self::Requester>)>;
+        -> Task<Self>;
 
     /// Standard rotor's wakeup handler
     ///
     /// If `connection.is_idle()` you may initiate a new request
+    ///
+    /// Note: currently we call this action only when there is no request
+    /// beign active (otherwise wakeup goes to request state machine), but
+    /// we may change it in future to allow request pipelining
     fn wakeup(self,
         connection: &Connection,
         scope: &mut Scope<<Self::Requester as Requester>::Context>)
-        -> Option<(Self, Option<Self::Requester>)>;
+        -> Task<Self>;
 
-    /// Returns number of seconds connection may remain idle until it will
-    /// be closed
-    fn idle_timeout(&self,
-        _scope: &mut Scope<<Self::Requester as Requester>::Context>)
-        -> Duration
-    {
-        Duration::new(120, 0)
-    }
+    /// Standard rotor's timeout handler
+    ///
+    /// If `connection.is_idle()` you may initiate a new request
+    ///
+    /// Note: currently we call this action only when there is no request
+    /// beign active (otherwise timeout goes to request state machine), but
+    /// we may change it in future to allow request pipelining
+    fn timeout(self,
+        connection: &Connection,
+        scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Task<Self>;
 
     /// Returns number of seconds to wait for connection to be established
     ///

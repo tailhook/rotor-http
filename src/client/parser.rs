@@ -9,7 +9,7 @@ use rotor_stream::Buf;
 use httparse;
 
 use super::{MAX_HEADERS_SIZE, MAX_HEADERS_NUM, MAX_CHUNK_HEAD};
-use super::{Client, Requester, Connection};
+use super::{Client, Requester, Connection, Task};
 use super::head::Head;
 use super::request::{Request, state};
 use super::head::BodyKind;
@@ -40,7 +40,7 @@ pub struct Parser<M, S>(M, ParserImpl<M::Requester>, PhantomData<*const S>)
     where M: Client, S: StreamSocket;
 
 enum ParserImpl<M: Requester> {
-    Idle,
+    Idle(Time),
     ReadHeaders {
         machine: M,
         request: MessageState,
@@ -52,6 +52,7 @@ enum ParserImpl<M: Requester> {
         deadline: Time,
         request: MessageState,
     },
+    Sending(Time),
 }
 
 fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
@@ -192,8 +193,7 @@ impl<M: Client, S: StreamSocket> Parser<M, S> {
     {
         if req.is_complete() {
             let dl = scope.now() + cli.response_timeout(scope);
-            Intent::of(ParserImpl::Idle.wrap(cli))
-            .expect_flush().deadline(dl)
+            ParserImpl::Sending(dl).intent(cli, scope)
         } else {
             // Response is done before request is sent fully, let's close
             // the connectoin
@@ -238,12 +238,38 @@ impl<M: Requester> ParserImpl<M> {
                 };
                 (exp, min(*deadline, scope.now() + machine.byte_timeout(scope)))
             }
-            Idle => {
-                let dline = scope.now() + cli.idle_timeout(scope);
-                return Intent::of(self.wrap(cli)).sleep().deadline(dline);
-            }
+            Idle(x) => (Sleep, x),
+            Sending(x) => (Flush(0), x),
         };
         Intent::of(self.wrap(cli)).expect(exp).deadline(dline)
+    }
+}
+
+fn maybe_new_request<M: Client, S: StreamSocket>(
+    transport: &mut Transport<S>, task: Task<M>,
+    scope: &mut Scope<<M::Requester as Requester>::Context>)
+    -> Intent<Parser<M, S>>
+{
+    let (cli, m) = match task {
+        Task::Close => return Intent::done(),
+        Task::Sleep(cli, deadline) => {
+            return ParserImpl::Idle(deadline).intent(cli, scope);
+        }
+        Task::Request(cli, m) => (cli, m)
+    };
+    let mut req = Request::new(transport.output());
+    match m.prepare_request(&mut req) {
+        Some(m) => {
+            let deadline = scope.now() + m.byte_timeout(scope);
+            Intent::of(Parser(cli, ParserImpl::ReadHeaders {
+                    machine: m,
+                    is_head: req.1,
+                    request: state(req),
+                }, PhantomData))
+            .expect_delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE)
+            .deadline(deadline)
+        }
+        None => unimplemented!(),
     }
 }
 
@@ -259,8 +285,7 @@ impl<M, S> Protocol for Parser<M, S>
     {
         let cli = M::create(seed, scope);
         let deadline = scope.now() + cli.connect_timeout(scope);
-        Intent::of(ParserImpl::Idle.wrap(cli))
-        .expect_flush().deadline(deadline)
+        ParserImpl::Sending(deadline).intent(cli, scope)
     }
     fn bytes_read(self, transport: &mut Transport<Self::Socket>,
         end: usize, scope: &mut Scope<Self::Context>)
@@ -400,7 +425,8 @@ impl<M, S> Protocol for Parser<M, S>
                 }
             }
             // TODO(tailhook) turn this into some error, or log it?
-            Idle => Intent::done(),
+            Idle(..) => Intent::done(),
+            Sending(..) => unreachable!(),
         }
     }
     fn bytes_flushed(self, transport: &mut Transport<Self::Socket>,
@@ -409,56 +435,47 @@ impl<M, S> Protocol for Parser<M, S>
     {
         use self::ParserImpl::*;
         match self.1 {
-            Idle => {
-                let temp_result = self.0.connection_idle(&Connection {
+            Sending(..) => {
+                maybe_new_request(transport,
+                    self.0.connection_idle(&Connection {
                         idle: true,
-                    }, scope);
-                let (cli, m) = match temp_result {
-                    None => return Intent::done(),
-                    Some((cli, None)) => {
-                        let deadline = scope.now() + cli.idle_timeout(scope);
-                        return Intent::of(ParserImpl::Idle.wrap(cli)).sleep()
-                               .deadline(deadline);
-                    }
-                    Some((cli, Some(m))) => (cli, m),
-                };
-                let mut req = Request::new(transport.output());
-                match m.prepare_request(&mut req) {
-                    Some(m) => {
-                        let deadline = scope.now() + m.byte_timeout(scope);
-                        Intent::of(Parser(cli, ReadHeaders {
-                                machine: m,
-                                is_head: req.1,
-                                request: state(req),
-                            }, PhantomData))
-                        .expect_delimiter(b"\r\n\r\n", MAX_HEADERS_SIZE)
-                        .deadline(deadline)
-                    }
-                    None => unimplemented!(),
-                }
+                    }, scope), scope)
             }
+            Idle(..) => unreachable!(),
             ReadHeaders {..} => unreachable!(),
             Response { .. }  => {
                 unimplemented!();
             }
         }
     }
-    fn timeout(self, _transport: &mut Transport<Self::Socket>,
-        _scope: &mut Scope<Self::Context>)
+    fn timeout(self, transport: &mut Transport<Self::Socket>,
+        scope: &mut Scope<Self::Context>)
         -> Intent<Self>
     {
-        unimplemented!();
+        use self::ParserImpl::*;
+        match self.1 {
+            Idle(..) => {
+                maybe_new_request(transport,
+                    self.0.timeout(&Connection {
+                        idle: true,
+                    }, scope), scope)
+            }
+            _ => unimplemented!(),
+        }
     }
-    fn wakeup(self, _transport: &mut Transport<Self::Socket>,
-        _scope: &mut Scope<Self::Context>)
+    fn wakeup(self, transport: &mut Transport<Self::Socket>,
+        scope: &mut Scope<Self::Context>)
         -> Intent<Self>
     {
-        /*
-        let temp_result = self.0.wakeup(&Connection {
-                idle: ??,
-            }, scope);
-        */
-        unimplemented!();
+        use self::ParserImpl::*;
+        match self.1 {
+            Idle(..) => {
+                maybe_new_request(transport,
+                    self.0.wakeup(&Connection {
+                        idle: true,
+                    }, scope), scope)
+            }
+            _ => unimplemented!(),
+        }
     }
-
 }

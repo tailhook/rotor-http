@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use rotor::{Scope, Time};
 use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
-use rotor_http::client::{Connection, Requester};
+use rotor_http::client::{Connection, Requester, Task};
 use rotor_http::Version::Http11;
 
 struct Context;
@@ -27,22 +27,29 @@ impl Client for Cli {
     }
     fn connection_idle(mut self, _conn: &Connection,
         scope: &mut Scope<Context>)
-        -> Option<(Self, Option<Req>)>
+        -> Task<Cli>
     {
         match self.0.take() {
-            Some(req) => Some((Cli(None), Some(Req(req)))),
+            Some(req) => Task::Request(Cli(None), Req(req)),
             None => {
                 scope.shutdown_loop();
-                None
+                Task::Close
             }
         }
     }
     fn wakeup(self,
         _connection: &Connection,
         _scope: &mut Scope<<Self::Requester as Requester>::Context>)
-        -> Option<(Self, Option<Self::Requester>)>
+        -> Task<Cli>
     {
-        Some((self, None))
+        unimplemented!();
+    }
+    fn timeout(self,
+        _connection: &Connection,
+        _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Task<Cli>
+    {
+        unimplemented!();
     }
 }
 
