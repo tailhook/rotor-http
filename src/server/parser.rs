@@ -931,4 +931,112 @@ mod test {
         });
     }
 
+    // FIXME: Fix parsing newline delimited headers.
+    // http://tools.ietf.org/html/rfc7230#section-3.5
+    // It is directly supported by httparse and some websites
+    // (eg. Github API Errors) and clients use this.
+    #[test]
+    #[should_panic]
+    fn test_newline_delimited() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("GET / HTTP/1.1\n\
+            Content-Length: 0\n\
+            Connection: close\n\n".as_bytes());
+        println!("{:?}", io);
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), &mut lp.scope(1)).expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            progressive: false,
+            headers_received: 1,
+            body: String::from(""),
+            chunks_received: 0,
+            requests_received: 1,
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_pipelining() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("GET /foo HTTP/1.1\r\n\
+            Host: example.com\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            GET /bar HTTP/1.1\r\n\
+            Host: example.com\r\n\
+            Content-Length: 0\r\n\
+            \r\n".as_bytes());
+        println!("{:?}", io);
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), &mut lp.scope(1)).expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            progressive: false,
+            headers_received: 2,
+            body: String::from(""),
+            chunks_received: 0,
+            requests_received: 2,
+        });
+    }
+
+    // FIXME: leading whitespace, causes assertion failure
+    // In the interest of robustness, a server that is expecting to receive
+    // and parse a request-line SHOULD ignore at least one empty line (CRLF)
+    // received prior to the request-line.
+    // http://tools.ietf.org/html/rfc7230#section-3.5
+    #[test]
+    fn test_leading_whitespace() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("\r\nGET /foo HTTP/1.1\r\n\
+            Host: example.com\r\n\r\n".as_bytes());
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), &mut lp.scope(1)).expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            progressive: false,
+            headers_received: 1,
+            body: String::from(""),
+            chunks_received: 0,
+            requests_received: 1,
+        });
+    }
+
+    // FIXME: causes assertion failure
+    #[test]
+    #[should_panic]
+    fn test_broken_http() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("GET / HTTP/1.1\r\n\nHost: host\r\n\r\n".as_bytes());
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), &mut lp.scope(1)).expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+    }
+
+    #[test]
+    fn test_crazy() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("~36!$543&..JKLHfF+Dkjk /foo/$bar HTTP/1.1\r\n\r\n".as_bytes());
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), &mut lp.scope(1)).expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            progressive: false,
+            headers_received: 1,
+            body: String::from(""),
+            chunks_received: 0,
+            requests_received: 1,
+        });
+    }
+
 }
