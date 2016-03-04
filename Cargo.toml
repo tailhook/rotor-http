@@ -12,8 +12,8 @@ authors = ["paul@colomiets.name", "pyfisch@gmail.com"]
 
 [dependencies]
 httparse = "1.1"
-rotor = "0.6.0"
-rotor-stream = "0.5.0"
+rotor = "0.6.1"
+rotor-stream = "0.5.1"
 quick-error = "1.0.0"
 matches = "0.1"
 
