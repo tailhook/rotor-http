@@ -17,12 +17,11 @@ mod request;
 mod head;
 mod protocol;
 mod parser;
-mod context;
+mod connection;
 
 pub use self::request::{Request};
-pub use self::protocol::Client;
+pub use self::protocol::{Client, Requester};
 pub use self::head::Head;
-pub use self::context::Context;
 pub use recvmode::RecvMode;
 
 use self::parser::Parser;
@@ -52,13 +51,22 @@ pub type Fsm<P, S> = rotor_stream::Stream<Parser<P, S>>;
 /// A state machine for persistent connections
 pub type Persistent<P, S> = rotor_stream::Persistent<Parser<P, S>>;
 
-pub fn connect_tcp<P:Client>(scope: &mut Scope<P::Context>,
-    addr: &SocketAddr, req: P)
+/// Structure that describes current connection state
+///
+/// In `Client::wakeup` you may check whether you can send a request using
+/// `Connection::is_idle`
+pub struct Connection {
+    idle: bool,
+}
+
+pub fn connect_tcp<P: Client>(
+    scope: &mut Scope<<P::Requester as Requester>::Context>,
+    addr: &SocketAddr, seed: P::Seed)
     -> Response<Fsm<P, TcpStream>, Void>
 {
     let sock = match TcpStream::connect(&addr) {
         Ok(sock) => sock,
         Err(e) => return Response::error(Box::new(e)),
     };
-    rotor_stream::Stream::new(sock, req, scope)
+    rotor_stream::Stream::new(sock, seed, scope)
 }

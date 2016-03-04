@@ -8,16 +8,45 @@ use std::time::Duration;
 
 use rotor::{Scope, Time};
 use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
-use rotor_http::client::{Context as HttpCtx};
+use rotor_http::client::{Connection, Requester};
 use rotor_http::Version::Http11;
 
 struct Context;
 
-impl HttpCtx for Context {}
-
+struct Cli(Option<String>);
 struct Req(String);
 
-impl Client for Req {
+impl Client for Cli {
+    type Requester = Req;
+    type Seed = String;
+    fn create(seed: Self::Seed,
+        _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Self
+    {
+        Cli(Some(seed))
+    }
+    fn connection_idle(mut self, _conn: &Connection,
+        scope: &mut Scope<Context>)
+        -> Option<(Self, Option<Req>)>
+    {
+        match self.0.take() {
+            Some(req) => Some((Cli(None), Some(Req(req)))),
+            None => {
+                scope.shutdown_loop();
+                None
+            }
+        }
+    }
+    fn wakeup(self,
+        _connection: &Connection,
+        _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Option<(Self, Option<Self::Requester>)>
+    {
+        Some((self, None))
+    }
+}
+
+impl Requester for Req {
     type Context = Context;
     fn prepare_request(self, req: &mut Request) -> Option<Self> {
         req.start("GET", &self.0, Http11);
@@ -39,14 +68,13 @@ impl Client for Req {
             scope.now() + Duration::new(1000, 0)))
     }
     fn response_received(self, data: &[u8], _request: &mut Request,
-        scope: &mut Scope<Self::Context>)
+        _scope: &mut Scope<Self::Context>)
     {
         println!("----- Response -----");
         stdout().write_all(data).unwrap();
         if data.last() != Some(&b'\n') {
             println!("");
         }
-        scope.shutdown_loop();
     }
     fn response_chunk(self, _chunk: &[u8], _request: &mut Request,
         _scope: &mut Scope<Self::Context>)
@@ -76,10 +104,10 @@ fn main() {
     let creator = rotor::Loop::new(&rotor::Config::new()).unwrap();
     let mut loop_inst = creator.instantiate(Context);
     loop_inst.add_machine_with(|scope| {
-        connect_tcp(scope,
+        connect_tcp::<Cli>(scope,
             &("google.com", 80).to_socket_addrs()
                 .unwrap().collect::<Vec<_>>()[0],
-            Req(format!("/")))
+            format!("/"))
     }).unwrap();
     loop_inst.run().unwrap();
 }

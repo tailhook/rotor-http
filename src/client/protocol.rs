@@ -1,10 +1,70 @@
+use std::time::Duration;
+
 use rotor::{Scope, Time};
 
 use recvmode::RecvMode;
-use super::{Head, Request, Context};
+use super::{Head, Request};
+use super::{Connection};
 
+/// A state machine that allows to initiate a client-side HTTP request
+///
+/// Used for all versions of HTTP.
+pub trait Client: Sized {
+    type Requester: Requester;
+    type Seed: Clone + Sized;
 
-/// A handler of client-side HTTP
+    fn create(seed: Self::Seed,
+        scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Self;
+
+    /// The handler is invoked when connection is succeed or when previous
+    /// request has just finished
+    ///
+    /// To initiate a request, return `Requester` as part of a return value.
+    fn connection_idle(self,
+        connection: &Connection,
+        scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Option<(Self, Option<Self::Requester>)>;
+
+    /// Standard rotor's wakeup handler
+    ///
+    /// If `connection.is_idle()` you may initiate a new request
+    fn wakeup(self,
+        connection: &Connection,
+        scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Option<(Self, Option<Self::Requester>)>;
+
+    /// Returns number of seconds connection may remain idle until it will
+    /// be closed
+    fn idle_timeout(&self,
+        _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Duration
+    {
+        Duration::new(120, 0)
+    }
+
+    /// Returns number of seconds to wait for connection to be established
+    ///
+    /// This timeout is not obeyed for `Persistent` connections
+    fn connect_timeout(&self,
+        _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Duration
+    {
+        Duration::new(15, 0)
+    }
+    /// The maximum time response may be kept in output buffer until connection
+    /// is closed
+    // TODO(tailhook) this may somehow depend on a client or on a number of
+    // bytes
+    fn response_timeout(&self,
+        _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+        -> Duration
+    {
+        Duration::new(120, 0)
+    }
+}
+
+/// A handler of a single client-side HTTP
 ///
 /// Used for all versions of HTTP.
 ///
@@ -23,8 +83,8 @@ use super::{Head, Request, Context};
 /// don't know whether response is valid and if it's too long to wait it's
 /// response). So in case you need to discard the response and it's more cheap
 /// than reopening a connection, you must read and ignore it yourself.
-pub trait Client: Sized {
-    type Context: Context;
+pub trait Requester: Sized {
+    type Context;
 
     /// Populates a request
     ///
@@ -109,4 +169,13 @@ pub trait Client: Sized {
         -> Option<(Self, Time)>;
     fn wakeup(self, request: &mut Request, scope: &mut Scope<Self::Context>)
         -> Option<Self>;
+
+    /// Returns number of seconds between any read/write operation to wait
+    /// until connection is closed as stalled
+    ///
+    /// This doesn't influence idle connections (where no active request is
+    /// going on). Use `Client::idle_connection` to set the latter.
+    fn byte_timeout(&self, _scope: &mut Scope<Self::Context>) -> Duration {
+        Duration::new(120, 0)
+    }
 }
