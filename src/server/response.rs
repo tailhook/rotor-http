@@ -68,6 +68,19 @@ impl<'a> Response<'a> {
         return false;
     }
 
+    /// Write a 100 Continue response.
+    ///
+    /// A server should respond with the 100 status code if it receives a
+    /// 100-continue expectation.
+    ///
+    /// # Panics
+    ///
+    /// When the response is already started. It's expected that your response
+    /// handler state machine will never call the method twice.
+    pub fn response_continue(&mut self) {
+        self.0.response_continue()
+    }
+
     /// Write status line
     ///
     /// This puts status line into a buffer immediately. If you don't
