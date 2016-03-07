@@ -130,6 +130,7 @@ fn consumed(off: usize) -> usize {
     if off > 0 { off+2 } else { 0 }
 }
 
+#[derive(Debug)]
 pub enum ParserImpl<M: Server> {
     Idle,
     ReadHeaders,
@@ -144,6 +145,7 @@ impl <M: Server>ParserImpl<M> {
     }
 }
 
+#[derive(Debug)]
 pub struct Parser<M, S>(ParserImpl<M>, PhantomData<*const S>)
     where M: Server, S: StreamSocket;
 
@@ -569,7 +571,7 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
 
 #[cfg(test)]
 mod test {
-    #![cfg(feature="nightly")]
+    #[cfg(feature="nightly")]
     use test::Bencher;
     use std::default::Default;
     use std::time::Duration;
