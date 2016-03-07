@@ -65,11 +65,10 @@ pub trait Client: Sized {
     {
         Duration::new(15, 0)
     }
-    /// The maximum time response may be kept in output buffer until connection
-    /// is closed
-    // TODO(tailhook) this may somehow depend on a client or on a number of
-    // bytes
-    fn response_timeout(&self,
+    /// Idle timeout
+    ///
+    /// Timeout for keep-alive connection to be idle
+    fn idle_timeout(&self,
         _scope: &mut Scope<<Self::Requester as Requester>::Context>)
         -> Duration
     {

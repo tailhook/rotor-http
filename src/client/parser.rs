@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::str::from_utf8;
 use std::cmp::min;
+use std::fmt;
 
 use rotor::{Scope, Time};
 use rotor_stream::{Protocol, StreamSocket};
@@ -19,6 +20,7 @@ use headers;
 use Version;
 
 
+#[derive(Debug)]
 pub enum BodyProgress {
     /// Buffered fixed-size request (bytes left)
     BufferFixed(usize),
@@ -40,6 +42,7 @@ pub struct Parser<M, S>(M, ParserImpl<M::Requester>, PhantomData<*const S>)
     where M: Client, S: StreamSocket;
 
 enum ParserImpl<M: Requester> {
+    Connecting(Time),
     Idle(Time),
     ReadHeaders {
         machine: M,
@@ -52,7 +55,38 @@ enum ParserImpl<M: Requester> {
         deadline: Time,
         request: MessageState,
     },
-    Sending(Time),
+    // This state is mostly useful to switch between states easier, but
+    // in fact if request is not flushed yet when response is fully received
+    // this is actually useful thing
+    Flushing(Time),
+}
+
+impl<M: Requester> fmt::Debug for ParserImpl<M> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        use self::ParserImpl::*;
+        match *self {
+            Connecting(tm) => {
+                fmt.debug_tuple("Connecting").field(&tm).finish()
+            }
+            Flushing(tm) => {
+                fmt.debug_tuple("Flushing").field(&tm).finish()
+            }
+            Idle(tm) => fmt.debug_tuple("Idle").field(&tm).finish(),
+            ReadHeaders { ref request, ref is_head, .. } => {
+                fmt.debug_struct("ReadHeaders")
+                .field("request", request)
+                .field("is_head", is_head)
+                .finish()
+            }
+            Response { ref progress, deadline, ref request, .. } => {
+                fmt.debug_struct("Response")
+                .field("progress", progress)
+                .field("deadline", &deadline)
+                .field("request", request)
+                .finish()
+            },
+        }
+    }
 }
 
 fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
@@ -192,8 +226,8 @@ impl<M: Client, S: StreamSocket> Parser<M, S> {
         -> Intent<Parser<M, S>>
     {
         if req.is_complete() {
-            let dl = scope.now() + cli.response_timeout(scope);
-            ParserImpl::Sending(dl).intent(cli, scope)
+            ParserImpl::Flushing(scope.now() + cli.idle_timeout(scope))
+                .intent(cli, scope)
         } else {
             // Response is done before request is sent fully, let's close
             // the connectoin
@@ -218,6 +252,7 @@ impl<M: Requester> ParserImpl<M> {
         use self::ParserImpl::*;
         use self::BodyProgress::*;
         let (exp, dline) = match self {
+            Connecting(dline) | Flushing(dline) => (E::Flush(0), dline),
             ReadHeaders { ref machine, ..} => (
                         E::Delimiter(0, b"\r\n\r\n", MAX_HEADERS_SIZE),
                         scope.now() + machine.byte_timeout(scope)),
@@ -239,7 +274,6 @@ impl<M: Requester> ParserImpl<M> {
                 (exp, min(*deadline, scope.now() + machine.byte_timeout(scope)))
             }
             Idle(x) => (Sleep, x),
-            Sending(x) => (Flush(0), x),
         };
         Intent::of(self.wrap(cli)).expect(exp).deadline(dline)
     }
@@ -285,7 +319,7 @@ impl<M, S> Protocol for Parser<M, S>
     {
         let cli = M::create(seed, scope);
         let deadline = scope.now() + cli.connect_timeout(scope);
-        ParserImpl::Sending(deadline).intent(cli, scope)
+        ParserImpl::Connecting(deadline).intent(cli, scope)
     }
     fn bytes_read(self, transport: &mut Transport<Self::Socket>,
         end: usize, scope: &mut Scope<Self::Context>)
@@ -379,8 +413,9 @@ impl<M, S> Protocol for Parser<M, S>
                         match val_opt {
                             Some(0) => {
                                 inp.remove_range(off..end+2);
-                                machine.response_received(
+                                let m = machine.response_chunk(
                                     &inp[..off], &mut req, scope);
+                                m.map(|m| m.response_end(&mut req, scope));
                                 inp.consume(off);
                                 return Parser::finish(self.0, req, scope);
                             }
@@ -426,7 +461,8 @@ impl<M, S> Protocol for Parser<M, S>
             }
             // TODO(tailhook) turn this into some error, or log it?
             Idle(..) => Intent::done(),
-            Sending(..) => unreachable!(),
+            Connecting(..) => unreachable!(),
+            Flushing(..) => unreachable!(),
         }
     }
     fn bytes_flushed(self, transport: &mut Transport<Self::Socket>,
@@ -435,7 +471,7 @@ impl<M, S> Protocol for Parser<M, S>
     {
         use self::ParserImpl::*;
         match self.1 {
-            Sending(..) => {
+            Connecting(..) | Flushing(..) => {
                 maybe_new_request(transport,
                     self.0.connection_idle(&Connection {
                         idle: true,
@@ -455,12 +491,15 @@ impl<M, S> Protocol for Parser<M, S>
         use self::ParserImpl::*;
         match self.1 {
             Idle(..) => {
+                // TODO(tailhook) propagate same idle deadline
                 maybe_new_request(transport,
                     self.0.timeout(&Connection {
                         idle: true,
                     }, scope), scope)
             }
-            _ => unimplemented!(),
+            s => {
+                unimplemented!();
+            }
         }
     }
     fn wakeup(self, transport: &mut Transport<Self::Socket>,
@@ -469,13 +508,20 @@ impl<M, S> Protocol for Parser<M, S>
     {
         use self::ParserImpl::*;
         match self.1 {
+            // skip the event, will child state machine when connected
+            me@Connecting(..) => me.intent(self.0, scope),
+            // skip the event, will child state machine when connected
+            me@Flushing(..) => me.intent(self.0, scope),
             Idle(..) => {
+                // TODO(tailhook) propagate same idle deadline
                 maybe_new_request(transport,
                     self.0.wakeup(&Connection {
                         idle: true,
                     }, scope), scope)
             }
-            _ => unimplemented!(),
+            _ => {
+                unimplemented!();
+            }
         }
     }
 }
