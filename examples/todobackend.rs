@@ -8,6 +8,11 @@
 //! of serde macros.
 //!
 //! To run use `cargo run --example todobackend --features nightly`.
+//!
+//! Now you can edit your own todo list via
+//! http://todobackend.com/client/index.html?http://localhost:3000
+//! (The web page is just for the frontend, the backend is this Rust
+//! program.)
 
 #![cfg_attr(feature="nightly", feature(custom_derive, plugin))]
 #![cfg_attr(feature="nightly", plugin(serde_macros))]
@@ -15,8 +20,8 @@
 
 extern crate rotor;
 extern crate rotor_http;
-#[cfg(features="nightly")] extern crate serde;
-#[cfg(features="nightly")] extern crate serde_json;
+#[cfg(feature="nightly")] extern crate serde;
+#[cfg(feature="nightly")] extern crate serde_json;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -237,20 +242,33 @@ impl Server for TodoBackend {
                 return None;
             }
             MethodNotAllowed(methods) => {
-                response.status(405, "Method Not Allowed");
-                response.add_length(b"Method Not Allowed".len() as u64).unwrap();
+                let reason = "Method Not Allowed";
+                response.status(405, reason);
+                response.add_length(reason.len() as u64).unwrap();
                 response.add_header("Access-Control-Allow-Origin", b"*").unwrap();
+                response.add_header("Content-Type", b"text/plain").unwrap();
                 response.add_header("Allow", methods).unwrap();
                 response.done_headers().unwrap();
-                response.write_body(b"Method Not Allowed");
+                response.write_body(reason.as_bytes());
                 response.done();
                 return None;
             }
-            NotFound => (404, "Not Found", Cow::Borrowed(&b"Not found"[..])),
+            NotFound => {
+                let reason = "Not Found";
+                response.status(404, reason);
+                response.add_length(reason.len() as u64).unwrap();
+                response.add_header("Access-Control-Allow-Origin", b"*").unwrap();
+                response.add_header("Content-Type", b"text/plain").unwrap();
+                response.done_headers().unwrap();
+                response.write_body(reason.as_bytes());
+                response.done();
+                return None;
+            },
         };
         response.status(status, reason);
         response.add_length(body.len() as u64).unwrap();
         response.add_header("Access-Control-Allow-Origin", b"*").unwrap();
+        response.add_header("Content-Type", b"application/json").unwrap();
         response.done_headers().unwrap();
         response.write_body(&body[..]);
         response.done();
