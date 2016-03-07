@@ -497,7 +497,7 @@ impl<M, S> Protocol for Parser<M, S>
                         idle: true,
                     }, scope), scope)
             }
-            s => {
+            _ => {
                 unimplemented!();
             }
         }
