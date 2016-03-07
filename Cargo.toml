@@ -24,3 +24,6 @@ rotor-test = "0.1.0"
 
 [lib]
 name = "rotor_http"
+
+[features]
+nightly = []
