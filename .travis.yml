@@ -8,7 +8,7 @@ env:
     secure: "TosWB/9/A+dlN7/mJ0knp22c8TFc11SLEXsmpEDXGgI1hdvlcLrBqSwXEy+1TgQ/nKhEPNYhb5edqfODZOSsyx2nFRk2ZAjuNXgYt36m6FJKyZI4p8oFR7AqToj2RQCRl03R6yWIdlK8dQGWYzFQfo9rX+huvAT1WpEgM8rXN9XMwWKCEmHrhPeWN6nbhZgPzrHJhpTgbGTzZfS4X7K6ns7k/ygjc2RIxGIGckIDMK0XXlETgSYv3B9kOmVY+3eB1QZVvsN0sv0YU8CoBew41yxdKiLNXBu4rsPEefZULdj75RqQ7dZsVpXwPn9NyMZLETArjbykwu0KFQcLZ/gN+4JRcHSxRuVSoI9RBGLadU6974HsnQW+hHlGufUk3kVnvbhJ6Ss02N9AIrVK7/LfImx/bJcS7K9tFvmQu4dZYiUF1PpBi3D7qdaIe8hlXoIPOjqUsoqm5ueLRt1YdbfCN4KZ/4TZTyVPmfaIgxLJAo/wL8wiuGFPZhD0dD0lE/+2FJYxqXD0no+bcvcwn87FfwhJkBDjB9eRBpS5qWu9eL/3RWvvDXmEQ/G+CsamUiC8IujYWOndbpAGkcVAGUZuejJVCZm6XWqSIvopWoFVMogJ+scWZ7C/4GPYMCVMvldtlB6MGC+Gc8pQJIkxMDhLQhNT6+Uk1AVU/fDMwZAIXwk="
 script:
 - cargo build --verbose
-- "if [ $TRAVIS_RUST_VERSION = nightly ]; then cargo test --verbose --feature nightly; else cargo test --verbose; fi"
+- "if [ $TRAVIS_RUST_VERSION = nightly ]; then cargo test --verbose --features nightly; else cargo test --verbose; fi"
 after_success: |
   [ $TRAVIS_RUST_VERSION = stable ] &&
   [ $TRAVIS_BRANCH = master ] &&
