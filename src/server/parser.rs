@@ -6,7 +6,6 @@ use std::str::from_utf8;
 use httparse::{EMPTY_HEADER, Request, parse_chunk_size};
 use rotor::{Scope, Time};
 use rotor::mio::tcp::TcpStream;
-use rotor::void::{Void, unreachable};
 use rotor_stream::{Exception, Intent, Protocol, StreamSocket, Transport};
 
 use Version;
@@ -131,33 +130,39 @@ fn consumed(off: usize) -> usize {
     if off > 0 { off+2 } else { 0 }
 }
 
-#[derive(Debug)]
-pub enum Parser<M: Server, S: StreamSocket> {
+pub enum ParserImpl<M: Server> {
     Idle,
     ReadHeaders,
     ReadingBody(ReadBody<M>),
     Processing(M, MessageState, bool, Time),
     DoneResponse,
-    #[doc(hidden)]
-    __Hidden(Void, PhantomData<*const S>),
 }
+
+impl <M: Server>ParserImpl<M> {
+    fn wrap<S: StreamSocket>(self) -> Parser<M, S> {
+        Parser(self, PhantomData)
+    }
+}
+
+pub struct Parser<M, S>(ParserImpl<M>, PhantomData<*const S>)
+    where M: Server, S: StreamSocket;
 
 impl<M: Server, S: StreamSocket> Parser<M, S> {
     #[inline]
     fn intent_idle(scope: &Scope<M::Context>) -> Intent<Self> {
-        Intent::of(Parser::Idle)
+        Intent::of(ParserImpl::Idle.wrap())
             .expect_bytes(1)
             .deadline(scope.now() + scope.byte_timeout())
     }
     #[inline]
     fn intent_headers(scope: &Scope<M::Context>, n: usize) -> Intent<Self> {
-        Intent::of(Parser::ReadHeaders)
+        Intent::of(ParserImpl::ReadHeaders.wrap())
             .expect_bytes(n + 1)
             .deadline(scope.now() + scope.byte_timeout())
     }
     #[inline]
     fn intent_flush(scope: &Scope<M::Context>) -> Intent<Self> {
-        Intent::of(Parser::DoneResponse)
+        Intent::of(ParserImpl::DoneResponse.wrap())
             .expect_flush()
             .deadline(scope.now() + scope.byte_timeout())
     }
@@ -177,7 +182,7 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
             }
         };
         let deadline = body.deadline;
-        Intent::of(Parser::ReadingBody(body)).expect(exp).deadline(deadline)
+        Intent::of(ParserImpl::ReadingBody(body).wrap()).expect(exp).deadline(deadline)
     }
     fn complete<'x>(scope: &mut Scope<M::Context>,
                     machine: Option<M>,
@@ -187,7 +192,7 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
                     -> Intent<Parser<M, S>> {
         match machine {
             Some(m) => {
-                Intent::of(Parser::Processing(m, state(response), connection_close, deadline))
+                Intent::of(ParserImpl::Processing(m, state(response), connection_close, deadline).wrap())
                     .sleep()
                     .deadline(deadline)
             }
@@ -220,8 +225,8 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                   end: usize,
                   scope: &mut Scope<Self::Context>)
                   -> Intent<Self> {
-        use self::Parser::*;
-        match self {
+        use self::ParserImpl::*;
+        match self.0 {
             Idle | ReadHeaders => {
                 use httparse::Status::*;
                 let n;
@@ -424,20 +429,19 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                 }
             }
             Processing(m, r, c, dline) => {
-                Intent::of(Processing(m, r, c, dline))
+                Intent::of(Processing(m, r, c, dline).wrap())
                     .sleep().deadline(dline)
             },
             /// TODO(tailhook) fix output timeout
             DoneResponse => Parser::intent_flush(scope),
-            __Hidden(v, _) => unreachable(v),
         }
     }
     fn bytes_flushed(self,
                      _transport: &mut Transport<Self::Socket>,
                      _scope: &mut Scope<Self::Context>)
                      -> Intent<Self> {
-        match self {
-            Parser::DoneResponse => Intent::done(),
+        match self.0 {
+            ParserImpl::DoneResponse => Intent::done(),
             _ => unreachable!(),
         }
     }
@@ -445,8 +449,8 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                transport: &mut Transport<Self::Socket>,
                scope: &mut Scope<Self::Context>)
                -> Intent<Self> {
-        use self::Parser::*;
-        match self {
+        use self::ParserImpl::*;
+        match self.0 {
             Idle | DoneResponse => Intent::done(),
             ReadHeaders => {
                 let output = transport.output();
@@ -491,15 +495,14 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                     }
                 }
             }
-            __Hidden(v, _) => unreachable(v),
         }
     }
     fn wakeup(self,
               transport: &mut Transport<Self::Socket>,
               scope: &mut Scope<Self::Context>)
               -> Intent<Self> {
-        use self::Parser::*;
-        match self {
+        use self::ParserImpl::*;
+        match self.0 {
             Idle => Parser::intent_idle(scope),
             ReadHeaders => Parser::intent_headers(scope, transport.input().len()),
             DoneResponse => Parser::intent_flush(scope),
@@ -519,7 +522,6 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                 let mres = m.wakeup(&mut resp, scope);
                 Parser::complete(scope, mres, resp, close, dline)
             }
-            __Hidden(v, _) => unreachable(v),
         }
     }
 
@@ -530,10 +532,10 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                  -> Intent<Self> {
         use rotor_stream::Exception::*;
         use self::BodyProgress::*;
-        use self::Parser::*;
+        use self::ParserImpl::*;
         match reason {
             LimitReached => {
-                if let ReadingBody(rb) = self {
+                if let ReadingBody(rb) = self.0 {
                     assert!(matches!(rb.progress,
                         ProgressiveChunked(_, _, 0) |
                         BufferChunked(_, _, 0)));
@@ -548,7 +550,7 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                 }
             }
             EndOfStream => {
-                if let ReadingBody(rb) = self {
+                if let ReadingBody(rb) = self.0 {
                     let mut resp = rb.response.with(transport.output());
                     rb.machine.map(|m| m.bad_request(&mut resp, scope));
                     if !resp.is_started() {
