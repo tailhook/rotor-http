@@ -149,6 +149,15 @@ impl <M: Server>ParserImpl<M> {
 pub struct Parser<M, S>(ParserImpl<M>, PhantomData<*const S>)
     where M: Server, S: StreamSocket;
 
+unsafe impl<M, S> Send for Parser<M, S>
+    where M: Server+Send, S: StreamSocket
+{}
+
+unsafe impl<M, S> Sync for Parser<M, S>
+    where M: Server+Sync, S: StreamSocket
+{}
+
+
 impl<M: Server, S: StreamSocket> Parser<M, S> {
     #[inline]
     fn intent_idle(scope: &Scope<M::Context>) -> Intent<Self> {
