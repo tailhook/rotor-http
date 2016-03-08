@@ -17,7 +17,7 @@ use super::head::BodyKind;
 use message::{MessageState};
 use recvmode::RecvMode;
 use headers;
-use Version;
+use version::Version;
 
 
 #[derive(Debug)]

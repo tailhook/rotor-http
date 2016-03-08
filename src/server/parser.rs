@@ -8,7 +8,7 @@ use rotor::{Scope, Time};
 use rotor::mio::tcp::TcpStream;
 use rotor_stream::{Exception, Intent, Protocol, StreamSocket, Transport};
 
-use Version;
+use version::Version;
 use headers;
 use message::MessageState;
 use recvmode::RecvMode;

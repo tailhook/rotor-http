@@ -1,5 +1,5 @@
 use httparse;
-use Version;
+use version::Version;
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

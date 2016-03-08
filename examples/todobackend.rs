@@ -25,14 +25,12 @@ extern crate rotor_http;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::str;
+use std::str::from_utf8;
 use std::time::Duration;
 
 use rotor::{Scope, Time};
-use rotor_http::ServerFsm;
-use rotor_http::server;
-use rotor_http::server::{RecvMode, Server, Head, Response};
 use rotor::mio::tcp::TcpListener;
+use rotor_http::server::{self, Fsm, Head, RecvMode, Response, Server};
 
 /// Represents a single Todo entry.
 ///
@@ -197,7 +195,7 @@ impl Server for TodoBackend {
         -> Option<Self>
     {
         use self::TodoBackend::*;
-        let text_data = str::from_utf8(data).unwrap();
+        let text_data = from_utf8(data).unwrap();
         let (status, reason, body) = match self {
             List => (200, "OK", Cow::Owned(serde_json::to_string(&scope.list()).unwrap().into_bytes())),
             Create => {
@@ -303,7 +301,7 @@ fn main() {
     });
     let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     loop_inst.add_machine_with(|scope| {
-        ServerFsm::<TodoBackend, _>::new(lst, scope)
+        Fsm::<TodoBackend, _>::new(lst, scope)
     }).unwrap();
     loop_inst.run().unwrap();
 }

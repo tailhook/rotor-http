@@ -1,7 +1,7 @@
 use rotor_stream::Buf;
 
 use message::{MessageState, Message, HeaderError};
-use Version;
+use version::Version;
 
 
 /// This response is returned when Response is dropping without writing
