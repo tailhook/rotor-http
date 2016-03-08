@@ -14,11 +14,3 @@ mod message;
 mod recvmode;
 mod headers;
 mod version;
-
-pub use version::Version;
-
-pub use rotor_stream::{Accept, Stream};
-
-/// A shortcut type for server state machine
-pub type ServerFsm<M, L> = Accept<Stream<
-    server::Parser<M, <L as rotor::mio::TryAccept>::Output>>, L>;

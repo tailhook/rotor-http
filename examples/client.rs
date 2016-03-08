@@ -7,9 +7,8 @@ use std::net::ToSocketAddrs;
 use std::time::Duration;
 
 use rotor::{Scope, Time};
-use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
-use rotor_http::client::{Connection, Requester, Task};
-use rotor_http::Version::Http11;
+use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode,
+    Connection, Requester, Task, Version};
 
 struct Context;
 
@@ -56,7 +55,7 @@ impl Client for Cli {
 impl Requester for Req {
     type Context = Context;
     fn prepare_request(self, req: &mut Request) -> Option<Self> {
-        req.start("GET", &self.0, Http11);
+        req.start("GET", &self.0, Version::Http11);
         req.done_headers().unwrap();
         req.done();
         Some(self)

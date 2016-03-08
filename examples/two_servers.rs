@@ -4,8 +4,7 @@ extern crate rotor_http;
 use std::time::Duration;
 
 use rotor::{Scope, Compose2, Time};
-use rotor_http::{ServerFsm};
-use rotor_http::server::{RecvMode, Server, Head, Response};
+use rotor_http::server::{Fsm, RecvMode, Server, Head, Response};
 use rotor::mio::tcp::{TcpListener};
 
 
@@ -141,10 +140,10 @@ fn main() {
         counter: 0,
     });
     loop_inst.add_machine_with(|scope| {
-        ServerFsm::<Incr, _>::new(lst1, scope).wrap(Compose2::A)
+        Fsm::<Incr, _>::new(lst1, scope).wrap(Compose2::A)
     }).unwrap();
     loop_inst.add_machine_with(|scope| {
-        ServerFsm::<Get, _>::new(lst2, scope).wrap(Compose2::B)
+        Fsm::<Get, _>::new(lst2, scope).wrap(Compose2::B)
     }).unwrap();
     loop_inst.run().unwrap();
 }

@@ -10,8 +10,7 @@ use std::os::unix::io::AsRawFd;
 use std::time::Duration;
 
 use rotor::{Scope, Time};
-use rotor_http::{ServerFsm};
-use rotor_http::server::{RecvMode, Server, Head, Response};
+use rotor_http::server::{Fsm, RecvMode, Server, Head, Response};
 
 
 struct Context {
@@ -147,7 +146,7 @@ fn main() {
                 counter: 0,
             });
             loop_inst.add_machine_with(|scope| {
-                ServerFsm::<HelloWorld, _>::new(listener, scope)
+                Fsm::<HelloWorld, _>::new(listener, scope)
             }).unwrap();
             loop_inst.run().unwrap();
         }));
