@@ -45,8 +45,9 @@ fn send_string(res: &mut Response, data: &[u8]) {
 }
 
 impl Server for Incr {
+    type Seed = ();
     type Context = Context;
-    fn headers_received(_head: Head, _res: &mut Response,
+    fn headers_received(_seed: (), _head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<(Self, RecvMode, Time)>
     {
@@ -88,8 +89,9 @@ impl Server for Incr {
 }
 
 impl Server for Get {
+    type Seed = ();
     type Context = Context;
-    fn headers_received(_head: Head, _res: &mut Response,
+    fn headers_received(_seed: (), _head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<(Self, RecvMode, Time)>
     {

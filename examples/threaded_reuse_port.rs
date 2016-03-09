@@ -52,8 +52,9 @@ fn send_string(res: &mut Response, data: &[u8]) {
 }
 
 impl Server for HelloWorld {
+    type Seed = ();
     type Context = Context;
-    fn headers_received(head: Head, _res: &mut Response,
+    fn headers_received(_seed: (), head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<(Self, RecvMode, Time)>
     {

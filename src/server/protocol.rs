@@ -11,6 +11,8 @@ use super::Response;
 /// Used for all versions of HTTP
 pub trait Server: Sized {
     type Context: Context;
+    /// Each request gets a clone of a Seed in `headers_received()` handler
+    type Seed: Clone;
     /// Encountered when headers received.
     ///
     /// Returns self, mode and timeout for reading whole request.
@@ -31,7 +33,7 @@ pub trait Server: Sized {
     /// Note that `head` is passed here once, and forgotten by the
     /// protocol. If you need it later it's your responsibility to store it
     /// somewhere.
-    fn headers_received(head: Head, response: &mut Response,
+    fn headers_received(seed: Self::Seed, head: Head, response: &mut Response,
         scope: &mut Scope<Self::Context>)
         -> Option<(Self, RecvMode, Time)>;
 
