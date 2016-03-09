@@ -3,6 +3,8 @@ extern crate rotor_http;
 
 
 use std::env;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -10,9 +12,8 @@ use rotor::{Scope, Time};
 use rotor_http::server::{Fsm, RecvMode, Server, Head, Response};
 use rotor::mio::tcp::TcpListener;
 
-
 struct Context {
-    counter: usize,
+    counter: Arc<AtomicUsize>,
 }
 
 trait Counter {
@@ -21,8 +22,8 @@ trait Counter {
 }
 
 impl Counter for Context {
-    fn increment(&mut self) { self.counter += 1; }
-    fn get(&self) -> usize { self.counter }
+    fn increment(&mut self) { self.counter.fetch_add(1, Ordering::SeqCst); }
+    fn get(&self) -> usize { self.counter.load(Ordering::SeqCst) }
 }
 
 impl rotor_http::server::Context for Context {
@@ -124,13 +125,15 @@ fn main() {
     let threads = env::var("THREADS").unwrap_or("2".to_string())
         .parse().unwrap();
     let mut children = Vec::new();
+    let counter = Arc::new(AtomicUsize::new(0));
     for _ in 0..threads {
+        let counter_ref = counter.clone();
         let listener = lst.try_clone().unwrap();
         children.push(thread::spawn(move || {
             let event_loop = rotor::Loop::new(
                 &rotor::Config::new()).unwrap();
             let mut loop_inst = event_loop.instantiate(Context {
-                counter: 0,
+                counter: counter_ref,
             });
             loop_inst.add_machine_with(|scope| {
                 Fsm::<HelloWorld, _>::new(listener, scope)
