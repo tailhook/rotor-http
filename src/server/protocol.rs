@@ -1,7 +1,9 @@
+use std::time::Duration;
+
 use rotor::{Scope, Time};
 
 use recvmode::RecvMode;
-use super::context::Context;
+use super::error::HttpError;
 use super::request::Head;
 use super::Response;
 
@@ -10,7 +12,7 @@ use super::Response;
 ///
 /// Used for all versions of HTTP
 pub trait Server: Sized {
-    type Context: Context;
+    type Context;
     /// Each request gets a clone of a Seed in `headers_received()` handler
     type Seed: Clone;
     /// Encountered when headers received.
@@ -51,9 +53,10 @@ pub trait Server: Sized {
     ///
     /// You may put error page here if response is not `is_started()`. Or you
     /// can finish response in case you can send something meaningfull anyway.
-    /// Otherwise, response will be filled with `BadRequest` from `Context` or
-    /// connection closed immediately (if `is_started()` is true). You
-    /// can't continue request processing after this handler is called.
+    /// Otherwise, response will be filled with `BadRequest` from
+    /// `emit_error_page` or connection closed immediately (if `is_started()`
+    /// is true). You can't continue request processing after this handler is
+    /// called.
     ///
     /// Currently it is called for two reasons:
     ///
@@ -104,4 +107,62 @@ pub trait Server: Sized {
         -> Option<(Self, Time)>;
     fn wakeup(self, response: &mut Response, scope: &mut Scope<Self::Context>)
         -> Option<Self>;
+
+    /// A bad request occured
+    ///
+    /// You should send a complete response in this handler.
+    ///
+    /// This is a static method, since it often called when there is no
+    /// instance of request at all. You may override a page for specific
+    /// request in `bad_request()` handler, if request headers are already
+    /// parsed. If `bad_request()` emits anything this method is not called.
+    ///
+    /// You may also use (parts of) `seed` value or a context to determine
+    /// the correct error page.
+    ///
+    /// You can also fallback to a default handler for pages you don't want
+    /// to render.
+    fn emit_error_page(code: &HttpError, response: &mut Response,
+        _seed: &Self::Seed, _scope: &mut Scope<Self::Context>)
+    {
+
+        let (status, reason) = code.http_status();
+        response.status(status, reason);
+        let data = format!("<h1>{} {}</h1>\n\
+            <p><small>Served for you by rotor-http</small></p>\n",
+            status, reason);
+        let bytes = data.as_bytes();
+        response.add_length(bytes.len() as u64).unwrap();
+        response.add_header("Content-Type", b"text/html").unwrap();
+        response.done_headers().unwrap();
+        response.write_body(bytes);
+        response.done();
+    }
+
+    /// A timeout for idle keep-alive connection
+    ///
+    /// Default is 120 seconds
+    fn idle_timeout(_seed: &Self::Seed, _scope: &mut Scope<Self::Context>)
+        -> Duration
+    {
+        return Duration::new(120, 0);
+    }
+    /// A timeout for receiving at least one byte from headers
+    ///
+    /// Default is 45 seconds
+    fn header_byte_timeout(_seed: &Self::Seed,
+        _scope: &mut Scope<Self::Context>)
+        -> Duration
+    {
+        return Duration::new(45, 0);
+    }
+    /// A timeout for sending full response body to the (slow) client
+    ///
+    /// Default is 3600 seconds (one hour)
+    fn send_response_timeout(_seed: &Self::Seed,
+        _scope: &mut Scope<Self::Context>)
+        -> Duration
+    {
+        return Duration::new(3600, 0);
+    }
 }

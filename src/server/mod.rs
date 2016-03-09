@@ -9,7 +9,6 @@ pub use rotor_stream::{Accept, Stream};
 pub use recvmode::RecvMode;
 pub use version::Version;
 pub use self::body::BodyKind;
-pub use self::context::Context;
 pub use self::parser::Parser;
 pub use self::protocol::Server;
 pub use self::request::Head;
@@ -17,7 +16,6 @@ pub use self::response::Response;
 pub use self::error::{RequestError, HttpError};
 
 mod body;
-mod context;
 mod parser;
 mod protocol;
 mod request;
@@ -25,7 +23,7 @@ mod response;
 mod error;
 
 
-// TODO(tailhook) MAX_HEADERS_SIZE can be moved to Context
+// TODO(tailhook) MAX_HEADERS_SIZE can be moved to Protocol
 // (i.e. made non-constant), but it's more of a problem for MAX_HEADERS_NUM
 // because that would mean we can't allocate array of headers on the stack
 // so performance will degrade. Customizing MAX_HEADERS_SIZE is not very

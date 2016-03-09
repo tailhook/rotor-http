@@ -32,10 +32,6 @@ struct Incr;
 
 struct Get;
 
-impl rotor_http::server::Context for Context {
-    // default impl is okay
-}
-
 fn send_string(res: &mut Response, data: &[u8]) {
     res.status(200, "OK");
     res.add_length(data.len() as u64).unwrap();

@@ -25,14 +25,6 @@ impl Counter for Context {
     fn get(&self) -> usize { self.counter }
 }
 
-impl rotor_http::server::Context for Context {
-    // default impl is okay
-    fn byte_timeout(&self) -> Duration {
-        Duration::new(1000, 0)
-    }
-}
-
-
 #[derive(Debug, Clone)]
 enum HelloWorld {
     Hello,
