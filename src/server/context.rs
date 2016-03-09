@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use super::parser::ErrorCode;
+use super::error::HttpError;
 use super::Response;
 
 pub trait Context {
@@ -9,14 +9,8 @@ pub trait Context {
     /// You should send a complete response. If there is already a `Server`
     /// instance to handle the request the `bad_request` method over there
     /// is called to allow stopping database requests and similiar.
-    fn emit_error_page(&self, code: ErrorCode, response: &mut Response) {
-        use super::parser::ErrorCode::*;
-        let (status, reason) = match code {
-            BadRequest => (400, "Bad Request"),
-            PayloadTooLarge => (413, "Payload Too Large"),
-            RequestTimeout => (408, "Request Timeout"),
-            RequestHeaderFieldsTooLarge => (431, "Request Header Fields Too Large"),
-        };
+    fn emit_error_page(&self, code: &HttpError, response: &mut Response) {
+        let (status, reason) = code.http_status();
         response.status(status, reason);
         let data = format!("<h1>{} {}</h1>\n\
             <p><small>Served for you by rotor-http</small></p>\n",

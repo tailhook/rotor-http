@@ -14,6 +14,7 @@ pub use self::parser::Parser;
 pub use self::protocol::Server;
 pub use self::request::Head;
 pub use self::response::Response;
+pub use self::error::{RequestError, HttpError};
 
 mod body;
 mod context;
@@ -21,6 +22,7 @@ mod parser;
 mod protocol;
 mod request;
 mod response;
+mod error;
 
 
 // TODO(tailhook) MAX_HEADERS_SIZE can be moved to Context
