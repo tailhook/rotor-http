@@ -12,12 +12,12 @@ use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode,
 
 struct Context;
 
-struct Cli(Option<String>);
-struct Req(String);
+struct Cli(Option<(String, String)>);
+struct Req(String, String);
 
 impl Client for Cli {
     type Requester = Req;
-    type Seed = String;
+    type Seed = (String, String);
     fn create(seed: Self::Seed,
         _scope: &mut Scope<<Self::Requester as Requester>::Context>)
         -> Self
@@ -29,7 +29,7 @@ impl Client for Cli {
         -> Task<Cli>
     {
         match self.0.take() {
-            Some(req) => Task::Request(Cli(None), Req(req)),
+            Some((host, path)) => Task::Request(Cli(None), Req(host, path)),
             None => {
                 scope.shutdown_loop();
                 Task::Close
@@ -55,7 +55,8 @@ impl Client for Cli {
 impl Requester for Req {
     type Context = Context;
     fn prepare_request(self, req: &mut Request) -> Option<Self> {
-        req.start("GET", &self.0, Version::Http11);
+        req.start("GET", &self.1, Version::Http11);
+        req.add_header("Host", self.0.as_bytes()).unwrap();
         req.done_headers().unwrap();
         req.done();
         Some(self)
@@ -111,9 +112,8 @@ fn main() {
     let mut loop_inst = creator.instantiate(Context);
     loop_inst.add_machine_with(|scope| {
         connect_tcp::<Cli>(scope,
-            &("google.com", 80).to_socket_addrs()
-                .unwrap().collect::<Vec<_>>()[0],
-            format!("/"))
+            &("info.cern.ch", 80).to_socket_addrs().unwrap().collect::<Vec<_>>()[0],
+            ("info.cern.ch".to_owned(), "/hypertext/WWW/TheProject.html".to_owned()))
     }).unwrap();
     loop_inst.run().unwrap();
 }
