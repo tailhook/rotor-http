@@ -139,7 +139,7 @@ fn main() {
                 counter: 0,
             });
             loop_inst.add_machine_with(|scope| {
-                Fsm::<HelloWorld, _>::new(listener, scope)
+                Fsm::<HelloWorld, _>::new(listener, (), scope)
             }).unwrap();
             loop_inst.run().unwrap();
         }));

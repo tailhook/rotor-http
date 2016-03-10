@@ -117,7 +117,7 @@ fn main() {
     });
     let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     loop_inst.add_machine_with(|scope| {
-        Fsm::<HelloWorld, _>::new(lst, scope)
+        Fsm::<HelloWorld, _>::new(lst, (), scope)
     }).unwrap();
     loop_inst.run().unwrap();
 }

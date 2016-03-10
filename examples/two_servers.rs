@@ -138,10 +138,10 @@ fn main() {
         counter: 0,
     });
     loop_inst.add_machine_with(|scope| {
-        Fsm::<Incr, _>::new(lst1, scope).wrap(Compose2::A)
+        Fsm::<Incr, _>::new(lst1, (), scope).wrap(Compose2::A)
     }).unwrap();
     loop_inst.add_machine_with(|scope| {
-        Fsm::<Get, _>::new(lst2, scope).wrap(Compose2::B)
+        Fsm::<Get, _>::new(lst2, (), scope).wrap(Compose2::B)
     }).unwrap();
     loop_inst.run().unwrap();
 }

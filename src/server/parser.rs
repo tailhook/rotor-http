@@ -699,7 +699,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nContent-Length: 0\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -717,7 +717,7 @@ mod test {
         let mut lp = MockLoop::new(Default::default());
         io.push_bytes("GET / HTTP/1.1\r\nContent-".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -746,7 +746,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -775,7 +775,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -804,7 +804,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -842,7 +842,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -880,8 +880,9 @@ mod test {
             Content-Length: 0\n\
             Connection: close\n\n"
                           .as_bytes());
-        let m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                    .expect_machine();
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), (), &mut lp.scope(1))
+            .expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
          .expect_machine();
         assert_eq!(*lp.ctx(),
@@ -901,8 +902,9 @@ mod test {
         io.push_bytes("\r\nGET /foo HTTP/1.1\r\n\
             Host: example.com\r\n\r\n"
                           .as_bytes());
-        let m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                    .expect_machine();
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), (), &mut lp.scope(1))
+            .expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
          .expect_machine();
         assert_eq!(*lp.ctx(),
@@ -920,8 +922,9 @@ mod test {
         let mut io = MemIo::new();
         let mut lp = MockLoop::new(Default::default());
         io.push_bytes("~36!$543&..JKLHfF+Dkjk /foo/$bar HTTP/1.1\r\n\r\n".as_bytes());
-        let m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                    .expect_machine();
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), (), &mut lp.scope(1))
+            .expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
          .expect_machine();
         assert_eq!(*lp.ctx(),
@@ -941,8 +944,9 @@ mod test {
         let mut counter = 0;
         b.iter(|| {
             counter += 1;
-            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                            .expect_machine();
+            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(
+                io.clone(), (), &mut lp.scope(1))
+                .expect_machine();
             io.push_bytes("GET / HTTP/1.1\r\n");
             io.push_bytes("Host: blog.nemo.org\r\n");
             io.push_bytes("User-Agent: Mozilla/5.0 (X11; Linux x86_64");
@@ -981,8 +985,9 @@ mod test {
         let mut counter = 0;
         b.iter(|| {
             counter += 1;
-            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                            .expect_machine();
+            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(
+                io.clone(), (), &mut lp.scope(1))
+                .expect_machine();
             io.push_bytes("GET / HTTP/1.1\r\n");
             m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
             io.push_bytes("Host: blog.nemo.org\r\n");
