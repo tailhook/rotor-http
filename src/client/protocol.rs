@@ -109,7 +109,8 @@ pub trait Requester: Sized {
     /// are received. You must either send request *headers* in this handler
     /// or arrange this state machine to be waken up, because no actions will
     /// be invoked later unless response headers are sent.
-    fn prepare_request(self, req: &mut Request) -> Option<Self>;
+    fn prepare_request(self, req: &mut Request,
+        scope: &mut Scope<Self::Context>) -> Option<Self>;
 
     /// Encountered when headers received
     ///

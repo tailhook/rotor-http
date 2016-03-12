@@ -757,8 +757,8 @@ mod test {
             requests_received: 0,
         });
         io.push_bytes("0\r\n\r\n".as_bytes());
-        m.ready(EventSet::readable(), &mut lp.scope(1));
-            //.expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
         assert_eq!(*lp.ctx(), Context {
             progressive: false,
             headers_received: 1,

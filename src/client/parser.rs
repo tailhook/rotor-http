@@ -293,7 +293,7 @@ fn maybe_new_request<M: Client, S: StreamSocket>(
         Task::Request(cli, m) => (cli, m)
     };
     let mut req = Request::new(transport.output());
-    match m.prepare_request(&mut req) {
+    match m.prepare_request(&mut req, scope) {
         Some(m) => {
             let deadline = scope.now() + m.byte_timeout(scope);
             Intent::of(Parser(cli, ParserImpl::ReadHeaders {
@@ -537,30 +537,38 @@ mod test {
 
     #[derive(Debug, Default, PartialEq, Eq)]
     struct Context {
+        requests: usize,
+        headers_received: usize,
         responses_received: usize,
+        chunks_received: usize,
         bytes_received: usize,
+        errors: usize,
     }
 
     #[derive(Debug)]
-    struct Cli(());
+    struct Cli(usize);
     #[derive(Debug)]
-    struct Req(());
+    struct Req;
 
     impl Client for Cli {
         type Requester = Req;
-        type Seed = ();
+        type Seed = usize;
         fn create(seed: Self::Seed,
             _scope: &mut Scope<<Self::Requester as Requester>::Context>)
             -> Self
         {
             Cli(seed)
         }
-        fn connection_idle(self, _conn: &Connection,
-            _scope: &mut Scope<Context>)
+        fn connection_idle(mut self, _conn: &Connection,
+            scope: &mut Scope<Context>)
             -> Task<Cli>
         {
-            let req = Req(self.0);
-            Task::Request(self, req)
+            if self.0 > 0 {
+                self.0 -= 1;
+                Task::Request(self, Req)
+            } else {
+                Task::Sleep(self, scope.now() + Duration::new(100, 0))
+            }
         }
         fn wakeup(self,
             _connection: &Connection,
@@ -580,7 +588,11 @@ mod test {
 
     impl Requester for Req {
         type Context = Context;
-        fn prepare_request(self, req: &mut Request) -> Option<Self> {
+        fn prepare_request(self, req: &mut Request,
+            scope: &mut Scope<Self::Context>)
+            -> Option<Self>
+        {
+            scope.requests += 1;
             req.start("GET", "/", Version::Http11);
             req.add_header("Host", b"localhost").unwrap();
             req.done_headers().unwrap();
@@ -591,6 +603,7 @@ mod test {
             scope: &mut Scope<Self::Context>)
             -> Option<(Self, RecvMode, Time)>
         {
+            scope.headers_received += 1;
             Some((self,  RecvMode::Buffered(16386),
                 scope.now() + Duration::new(1000, 0)))
         }
@@ -623,8 +636,8 @@ mod test {
         {
             unimplemented!();
         }
-        fn bad_response(self, _scope: &mut Scope<Self::Context>) {
-            unimplemented!();
+        fn bad_response(self, scope: &mut Scope<Self::Context>) {
+            scope.errors += 1;
         }
     }
 
@@ -635,12 +648,47 @@ mod test {
         io.push_bytes("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Fsm::<Cli, MemIo>::connected(
-            io.clone(), (), &mut lp.scope(1)).expect_machine();
+            io.clone(), 1, &mut lp.scope(1)).expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
             responses_received: 1,
+            chunks_received: 0,
             bytes_received: 0,
+            errors: 0,
+        });
+    }
+
+    #[test]
+    fn test_empty_chunked() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\
+                       Connection: close\r\n\r\n".as_bytes());
+        let m = Fsm::<Cli, MemIo>::connected(
+            io.clone(), 1, &mut lp.scope(1)).expect_machine();
+        let m = m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 0,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
+        });
+        io.push_bytes("0\r\n\r\n".as_bytes());
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 1,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
         });
     }
 }

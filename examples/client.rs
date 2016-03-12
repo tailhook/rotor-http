@@ -62,7 +62,10 @@ impl Client for Cli {
 
 impl Requester for Req {
     type Context = Context;
-    fn prepare_request(self, req: &mut Request) -> Option<Self> {
+    fn prepare_request(self, req: &mut Request,
+        _scope: &mut Scope<Self::Context>)
+        -> Option<Self>
+    {
         req.start("GET", &self.0.serialize_path().unwrap(), Version::Http11);
         req.add_header("Host", self.0.domain().unwrap().as_bytes()).unwrap();
         req.done_headers().unwrap();
