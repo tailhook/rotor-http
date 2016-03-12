@@ -2,6 +2,7 @@ extern crate rotor;
 extern crate rotor_http;
 extern crate argparse;
 extern crate url;
+extern crate env_logger;
 
 
 use std::io::{stdout, stderr};
@@ -111,10 +112,16 @@ impl Requester for Req {
     {
         unimplemented!();
     }
+    fn bad_response(self, _scope: &mut Scope<Context>)
+    {
+        writeln!(&mut stderr(), "----- Bad response -----").ok();
+        exit(1);
+    }
 }
 
 
 fn main() {
+    env_logger::init().unwrap();
     let mut url = Url::parse(
         "http://info.cern.ch/hypertext/WWW/TheProject.html").unwrap();
     {
