@@ -82,7 +82,7 @@ impl Requester for Req {
             println!("{}: {}", header.name,
                 String::from_utf8_lossy(header.value));
         }
-        Some((self,  RecvMode::Buffered(16386),
+        Some((self,  RecvMode::Buffered(1 << 20),
             scope.now() + Duration::new(1000, 0)))
     }
     fn response_received(self, data: &[u8], _request: &mut Request,

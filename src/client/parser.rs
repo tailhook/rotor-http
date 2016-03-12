@@ -385,7 +385,7 @@ impl<M, S> Protocol for Parser<M, S>
                                         scope);
                                     return Intent::done();
                                 }
-                                inp.remove_range(off..end+2);
+                                inp.remove_range(off..lenstart + end + 2);
                                 (Some(machine),
                                  BufferChunked(limit, off, chunk_len as usize))
                             }
@@ -736,6 +736,45 @@ mod test {
             responses_received: 1,
             chunks_received: 0,
             bytes_received: 5,
+            errors: 0,
+        });
+    }
+
+    #[test]
+    fn test_chunked_encoding() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\
+                       Connection: close\r\n\r\n".as_bytes());
+        let m = Fsm::<Cli, MemIo>::connected(
+            io.clone(), 1, &mut lp.scope(1)).expect_machine();
+        let m = m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 0,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
+        });
+        io.push_bytes("4\r\n\
+                       Wiki\r\n\
+                       5\r\n\
+                       pedia\r\n\
+                       E\r\n in\r\n\
+                       \r\n\
+                       chunks.\r\n\
+                       0\r\n\
+                       \r\n".as_bytes());
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 1,
+            chunks_received: 0,
+            bytes_received: 23,
             errors: 0,
         });
     }
