@@ -1,23 +1,30 @@
 extern crate rotor;
 extern crate rotor_http;
+extern crate argparse;
+extern crate url;
 
-use std::io::stdout;
+
+use std::io::{stdout, stderr};
 use std::io::Write;
 use std::net::ToSocketAddrs;
 use std::time::Duration;
+use std::process::exit;
 
+use url::Url;
+use url::SchemeData::Relative;
+use argparse::{ArgumentParser, Store};
 use rotor::{Scope, Time};
 use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode,
     Connection, Requester, Task, Version};
 
 struct Context;
 
-struct Cli(Option<(String, String)>);
-struct Req(String, String);
+struct Cli(Option<Url>);
+struct Req(Url);
 
 impl Client for Cli {
     type Requester = Req;
-    type Seed = (String, String);
+    type Seed = Url;
     fn create(seed: Self::Seed,
         _scope: &mut Scope<<Self::Requester as Requester>::Context>)
         -> Self
@@ -29,7 +36,7 @@ impl Client for Cli {
         -> Task<Cli>
     {
         match self.0.take() {
-            Some((host, path)) => Task::Request(Cli(None), Req(host, path)),
+            Some(url) => Task::Request(Cli(None), Req(url)),
             None => {
                 scope.shutdown_loop();
                 Task::Close
@@ -55,8 +62,8 @@ impl Client for Cli {
 impl Requester for Req {
     type Context = Context;
     fn prepare_request(self, req: &mut Request) -> Option<Self> {
-        req.start("GET", &self.1, Version::Http11);
-        req.add_header("Host", self.0.as_bytes()).unwrap();
+        req.start("GET", &self.0.serialize_path().unwrap(), Version::Http11);
+        req.add_header("Host", self.0.domain().unwrap().as_bytes()).unwrap();
         req.done_headers().unwrap();
         req.done();
         Some(self)
@@ -108,12 +115,30 @@ impl Requester for Req {
 
 
 fn main() {
+    let mut url = Url::parse(
+        "http://info.cern.ch/hypertext/WWW/TheProject.html").unwrap();
+    {
+        let mut ap = ArgumentParser::new();
+        ap.refer(&mut url)
+            .add_argument("url", Store, "Url to fetch");
+        ap.parse_args_or_exit();
+    }
+    if &url.scheme != "http" {
+        writeln!(&mut stderr(), "Only 'http://' urls are supported for now")
+            .ok();
+        exit(1);
+    }
+    let addr = match url.scheme_data {
+        Relative(ref scheme) => {
+            (scheme.domain().unwrap(), scheme.port_or_default().unwrap())
+                .to_socket_addrs().unwrap().next().unwrap()
+        }
+        _ => unreachable!(),
+    };
     let creator = rotor::Loop::new(&rotor::Config::new()).unwrap();
     let mut loop_inst = creator.instantiate(Context);
     loop_inst.add_machine_with(|scope| {
-        connect_tcp::<Cli>(scope,
-            &("info.cern.ch", 80).to_socket_addrs().unwrap().collect::<Vec<_>>()[0],
-            ("info.cern.ch".to_owned(), "/hypertext/WWW/TheProject.html".to_owned()))
+        connect_tcp::<Cli>(scope, &addr, url)
     }).unwrap();
     loop_inst.run().unwrap();
 }

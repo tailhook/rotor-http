@@ -24,6 +24,8 @@ serde_macros = { version = "0.7", optional = true }
 libc = "0.1"
 net2 = "0.2"
 rotor-test = "0.1.0"
+url = "0.5.7"
+argparse = "0.2.1"
 
 [lib]
 name = "rotor_http"
