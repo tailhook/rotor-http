@@ -15,8 +15,8 @@ use url::Url;
 use url::SchemeData::Relative;
 use argparse::{ArgumentParser, Store};
 use rotor::{Scope, Time};
-use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode,
-    Connection, Requester, Task, Version};
+use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
+use rotor_http::client::{Connection, Requester, Task, Version, ResponseError};
 
 struct Context;
 
@@ -115,9 +115,9 @@ impl Requester for Req {
     {
         unimplemented!();
     }
-    fn bad_response(self, _scope: &mut Scope<Context>)
+    fn bad_response(self, err: &ResponseError, _scope: &mut Scope<Context>)
     {
-        writeln!(&mut stderr(), "----- Bad response -----").ok();
+        writeln!(&mut stderr(), "----- Bad response: {} -----", err).ok();
         exit(1);
     }
 }

@@ -3,7 +3,7 @@ use std::time::Duration;
 use rotor::{Scope, Time};
 
 use recvmode::RecvMode;
-use super::{Head, Request};
+use super::{Head, Request, ResponseError};
 use super::{Connection};
 
 pub enum Task<M: Client> {
@@ -141,15 +141,9 @@ pub trait Requester: Sized {
     /// anything. Note this event doesnt' relate to any HTTP status codes.
     /// They are treated as normal responses by the state machine.
     ///
-    /// Currently it is called for two reasons:
-    ///
-    /// 1. Invalid chunked encoding
-    /// 2. End of stream before number of bytes mentioned in Content-Length
-    /// 3. Trying to send response body with 204 status code
-    ///
     /// It's never called on a timeout.
-    // TODO(tailhook) should there be some reason?
-    fn bad_response(self, _scope: &mut Scope<Self::Context>)
+    fn bad_response(self, _error: &ResponseError,
+        _scope: &mut Scope<Self::Context>)
     {}
 
     /// Received chunk of data
