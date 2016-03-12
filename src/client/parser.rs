@@ -38,6 +38,7 @@ pub enum BodyProgress {
     ProgressiveChunked(usize, usize, u64),
 }
 
+#[derive(Debug)]
 pub struct Parser<M, S>(M, ParserImpl<M::Requester>, PhantomData<*const S>)
     where M: Client, S: StreamSocket;
 
@@ -523,5 +524,123 @@ impl<M, S> Protocol for Parser<M, S>
                 unimplemented!();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::Duration;
+    use rotor::{Scope, EventSet, Time, Machine};
+    use rotor_test::{MemIo, MockLoop};
+    use client::{Client, Requester, Connection, Task, Request, Version};
+    use client::{Head, RecvMode, Fsm};
+
+    #[derive(Debug, Default, PartialEq, Eq)]
+    struct Context {
+        responses_received: usize,
+        bytes_received: usize,
+    }
+
+    #[derive(Debug)]
+    struct Cli(());
+    #[derive(Debug)]
+    struct Req(());
+
+    impl Client for Cli {
+        type Requester = Req;
+        type Seed = ();
+        fn create(seed: Self::Seed,
+            _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+            -> Self
+        {
+            Cli(seed)
+        }
+        fn connection_idle(self, _conn: &Connection,
+            _scope: &mut Scope<Context>)
+            -> Task<Cli>
+        {
+            let req = Req(self.0);
+            Task::Request(self, req)
+        }
+        fn wakeup(self,
+            _connection: &Connection,
+            _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+            -> Task<Cli>
+        {
+            unimplemented!();
+        }
+        fn timeout(self,
+            _connection: &Connection,
+            _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+            -> Task<Cli>
+        {
+            unimplemented!();
+        }
+    }
+
+    impl Requester for Req {
+        type Context = Context;
+        fn prepare_request(self, req: &mut Request) -> Option<Self> {
+            req.start("GET", "/", Version::Http11);
+            req.add_header("Host", b"localhost").unwrap();
+            req.done_headers().unwrap();
+            req.done();
+            Some(self)
+        }
+        fn headers_received(self, _head: Head, _request: &mut Request,
+            scope: &mut Scope<Self::Context>)
+            -> Option<(Self, RecvMode, Time)>
+        {
+            Some((self,  RecvMode::Buffered(16386),
+                scope.now() + Duration::new(1000, 0)))
+        }
+        fn response_received(self, data: &[u8], _request: &mut Request,
+            scope: &mut Scope<Self::Context>)
+        {
+            scope.bytes_received += data.len();
+            scope.responses_received += 1;
+        }
+        fn response_chunk(self, _chunk: &[u8], _request: &mut Request,
+            _scope: &mut Scope<Self::Context>)
+            -> Option<Self>
+        {
+            unreachable!();
+        }
+        fn response_end(self, _request: &mut Request,
+            _scope: &mut Scope<Self::Context>)
+        {
+            unreachable!();
+        }
+        fn timeout(self, _request: &mut Request,
+            _scope: &mut Scope<Self::Context>)
+            -> Option<(Self, Time)>
+        {
+            unreachable!();
+        }
+        fn wakeup(self, _request: &mut Request,
+            _scope: &mut Scope<Self::Context>)
+            -> Option<Self>
+        {
+            unimplemented!();
+        }
+        fn bad_response(self, _scope: &mut Scope<Self::Context>) {
+            unimplemented!();
+        }
+    }
+
+    #[test]
+    fn test_zero_body() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\
+                       Connection: close\r\n\r\n".as_bytes());
+        let m = Fsm::<Cli, MemIo>::connected(
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            responses_received: 1,
+            bytes_received: 0,
+        });
     }
 }
