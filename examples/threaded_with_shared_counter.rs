@@ -6,14 +6,15 @@ extern crate rotor_http;
 
 
 use std::env;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use rotor::{Scope, Time};
 use rotor_http::server::{Fsm, RecvMode, Server, Head, Response};
 use rotor::mio::tcp::TcpListener;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
 
 struct Context {
     counter: Arc<AtomicUsize>,
@@ -28,14 +29,6 @@ impl Counter for Context {
     fn increment(&mut self) { self.counter.fetch_add(1, Ordering::SeqCst); }
     fn get(&self) -> usize { self.counter.load(Ordering::SeqCst) }
 }
-
-impl rotor_http::server::Context for Context {
-    // default impl is okay
-    fn byte_timeout(&self) -> Duration {
-        Duration::new(1000, 0)
-    }
-}
-
 
 #[derive(Debug, Clone)]
 enum HelloWorld {
@@ -54,8 +47,9 @@ fn send_string(res: &mut Response, data: &[u8]) {
 }
 
 impl Server for HelloWorld {
+    type Seed = ();
     type Context = Context;
-    fn headers_received(head: Head, _res: &mut Response,
+    fn headers_received(_seed: (), head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<(Self, RecvMode, Time)>
     {
@@ -139,7 +133,7 @@ fn main() {
                 counter: counter_ref,
             });
             loop_inst.add_machine_with(|scope| {
-                Fsm::<HelloWorld, _>::new(listener, scope)
+                Fsm::<HelloWorld, _>::new(listener, (), scope)
             }).unwrap();
             loop_inst.run().unwrap();
         }));
