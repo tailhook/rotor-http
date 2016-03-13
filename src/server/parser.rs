@@ -12,9 +12,11 @@ use version::Version;
 use headers;
 use message::MessageState;
 use recvmode::RecvMode;
-use super::{MAX_HEADERS_NUM, MAX_HEADERS_SIZE, MAX_CHUNK_HEAD, Context, Head, Response, Server};
+use super::{MAX_HEADERS_NUM, MAX_HEADERS_SIZE, MAX_CHUNK_HEAD};
+use super::{Head, Response, Server};
 use super::body::BodyKind;
 use super::response::state;
+use super::error::RequestError;
 
 #[derive(Debug)]
 pub struct ReadBody<M: Server> {
@@ -23,13 +25,6 @@ pub struct ReadBody<M: Server> {
     response: MessageState,
     progress: BodyProgress,
     connection_close: bool,
-}
-
-pub enum ErrorCode {
-    BadRequest,
-    PayloadTooLarge,
-    RequestTimeout,
-    RequestHeaderFieldsTooLarge,
 }
 
 #[derive(Debug)]
@@ -61,7 +56,9 @@ fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
     }
 }
 
-fn scan_raw_request(raw_request: &Request) -> Result<(BodyKind, bool, bool, bool), ()> {
+fn scan_raw_request(raw_request: &Request)
+    -> Result<(BodyKind, bool, bool, bool), RequestError>
+{
     // Implements the body length algorithm for requests:
     // http://httpwg.github.io/specs/rfc7230.html#message.body.length
     //
@@ -79,6 +76,7 @@ fn scan_raw_request(raw_request: &Request) -> Result<(BodyKind, bool, bool, bool
     //    (6th option in RFC).
     // 4. In all other cases the request is a bad request.
     use super::body::BodyKind::*;
+    use super::RequestError::*;
     let is_head = raw_request.method.unwrap() == "HEAD";
     let mut has_content_length = false;
     let mut close = raw_request.version.unwrap() == 0;
@@ -98,12 +96,12 @@ fn scan_raw_request(raw_request: &Request) -> Result<(BodyKind, bool, bool, bool
         } else if headers::is_content_length(header.name) {
             if has_content_length {
                 // duplicate content_length
-                return Err(());
+                return Err(DuplicateContentLength);
             }
             has_content_length = true;
             if body != Chunked {
-                let s = try!(from_utf8(header.value).map_err(|_| ()));
-                let len = try!(s.parse().map_err(|_| ()));
+                let s = try!(from_utf8(header.value));
+                let len = try!(s.parse().map_err(BadContentLength));
                 body = Fixed(len);
             } else {
                 // transfer-encoding has preference and don't allow keep-alive
@@ -140,13 +138,13 @@ pub enum ParserImpl<M: Server> {
 }
 
 impl <M: Server>ParserImpl<M> {
-    fn wrap<S: StreamSocket>(self) -> Parser<M, S> {
-        Parser(self, PhantomData)
+    fn wrap<S: StreamSocket>(self, seed: M::Seed) -> Parser<M, S> {
+        Parser(self, seed, PhantomData)
     }
 }
 
 #[derive(Debug)]
-pub struct Parser<M, S>(ParserImpl<M>, PhantomData<*const S>)
+pub struct Parser<M, S>(ParserImpl<M>, M::Seed, PhantomData<*const S>)
     where M: Server, S: StreamSocket;
 
 unsafe impl<M, S> Send for Parser<M, S>
@@ -160,24 +158,33 @@ unsafe impl<M, S> Sync for Parser<M, S>
 
 impl<M: Server, S: StreamSocket> Parser<M, S> {
     #[inline]
-    fn intent_idle(scope: &Scope<M::Context>) -> Intent<Self> {
-        Intent::of(ParserImpl::Idle.wrap())
+    fn intent_idle(seed: M::Seed, scope: &mut Scope<M::Context>)
+        -> Intent<Self>
+    {
+        let deadline = scope.now() + M::idle_timeout(&seed, scope);
+        Intent::of(ParserImpl::Idle.wrap(seed))
             .expect_bytes(1)
-            .deadline(scope.now() + scope.byte_timeout())
+            .deadline(deadline)
     }
     #[inline]
-    fn intent_headers(scope: &Scope<M::Context>, n: usize) -> Intent<Self> {
-        Intent::of(ParserImpl::ReadHeaders.wrap())
+    fn intent_headers(seed: M::Seed, scope: &mut Scope<M::Context>, n: usize)
+        -> Intent<Self>
+    {
+        let deadline = scope.now() + M::header_byte_timeout(&seed, scope);
+        Intent::of(ParserImpl::ReadHeaders.wrap(seed))
             .expect_bytes(n + 1)
-            .deadline(scope.now() + scope.byte_timeout())
+            .deadline(deadline)
     }
     #[inline]
-    fn intent_flush(scope: &Scope<M::Context>) -> Intent<Self> {
-        Intent::of(ParserImpl::DoneResponse.wrap())
+    fn intent_flush(seed: M::Seed, scope: &mut Scope<M::Context>)
+        -> Intent<Self>
+    {
+        let deadline = scope.now() + M::send_response_timeout(&seed, scope);
+        Intent::of(ParserImpl::DoneResponse.wrap(seed))
             .expect_flush()
-            .deadline(scope.now() + scope.byte_timeout())
+            .deadline(deadline)
     }
-    fn intent_body(body: ReadBody<M>) -> Intent<Self> {
+    fn intent_body(seed: M::Seed, body: ReadBody<M>) -> Intent<Self> {
         use rotor_stream::Expectation::*;
         use self::BodyProgress::*;
         let exp = match *&body.progress {
@@ -193,9 +200,10 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
             }
         };
         let deadline = body.deadline;
-        Intent::of(ParserImpl::ReadingBody(body).wrap()).expect(exp).deadline(deadline)
+        Intent::of(ParserImpl::ReadingBody(body).wrap(seed))
+            .expect(exp).deadline(deadline)
     }
-    fn complete<'x>(scope: &mut Scope<M::Context>,
+    fn complete<'x>(seed: M::Seed, scope: &mut Scope<M::Context>,
                     machine: Option<M>,
                     response: Response<'x>,
                     connection_close: bool,
@@ -203,7 +211,8 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
                     -> Intent<Parser<M, S>> {
         match machine {
             Some(m) => {
-                Intent::of(ParserImpl::Processing(m, state(response), connection_close, deadline).wrap())
+                Intent::of(ParserImpl::Processing(m, state(response),
+                                    connection_close, deadline).wrap(seed))
                     .sleep()
                     .deadline(deadline)
             }
@@ -212,9 +221,9 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
                 // an assert?
                 assert!(response.is_complete());
                 if connection_close {
-                    Parser::intent_flush(scope)
+                    Parser::intent_flush(seed, scope)
                 } else {
-                    Parser::intent_idle(scope)
+                    Parser::intent_idle(seed, scope)
                 }
             }
         }
@@ -224,12 +233,12 @@ impl<M: Server, S: StreamSocket> Parser<M, S> {
 impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
     type Context = M::Context;
     type Socket = S;
-    type Seed = ();
-    fn create(_seed: Self::Seed,
+    type Seed = M::Seed;
+    fn create(seed: Self::Seed,
               _sock: &mut Self::Socket,
               scope: &mut Scope<Self::Context>)
               -> Intent<Self> {
-        Parser::intent_idle(scope)
+        Parser::intent_idle(seed, scope)
     }
     fn bytes_read(self,
                   transport: &mut Transport<Self::Socket>,
@@ -237,6 +246,7 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                   scope: &mut Scope<Self::Context>)
                   -> Intent<Self> {
         use self::ParserImpl::*;
+        use super::RequestError::*;
         match self.0 {
             Idle | ReadHeaders => {
                 use httparse::Status::*;
@@ -255,57 +265,68 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                                                                  Version::Http10,
                                                                  false,
                                                                  true);
-                                scope.emit_error_page(ErrorCode::PayloadTooLarge, &mut response);
-                                return Parser::intent_flush(scope);
+                                M::emit_error_page(&HeadersAreTooLarge,
+                                    &mut response, &self.1, scope);
+                                return Parser::intent_flush(self.1, scope);
                             }
-                            return Parser::intent_headers(scope, input.len());
+                            return Parser::intent_headers(self.1,
+                                scope, input.len());
                         }
-                        Err(_) => {
-                            let mut response = Response::new(output, Version::Http10, false, true);
-                            scope.emit_error_page(ErrorCode::BadRequest, &mut response);
-                            return Parser::intent_flush(scope);
+                        Err(e) => {
+                            let mut response = Response::new(output,
+                                Version::Http10, false, true);
+                            M::emit_error_page(&RequestError::from(e),
+                                &mut response, &self.1, scope);
+                            return Parser::intent_flush(self.1, scope);
                         }
                     };
-                    if let Ok((body, is_head, expect_continue, close)) =
-                           scan_raw_request(&raw_request) {
-                        let version = if raw_request.version.unwrap() == 1 {
-                            Version::Http11
-                        } else {
-                            Version::Http10
-                        };
-                        let request = Head {
-                            client: client,
-                            version: version,
-                            method: raw_request.method.unwrap(),
-                            scheme: "http",
-                            path: raw_request.path.unwrap(),
-                            headers: raw_request.headers,
-                            body_kind: body,
-                        };
-                        let mut response = Response::new(output, request.version, is_head, close);
-                        let triple = M::headers_received(request, &mut response, scope);
-                        if triple.is_none() && response.is_started() {
-                            if !expect_continue {
-                                return Intent::done();
+                    match scan_raw_request(&raw_request) {
+                        Ok((body, is_head, expect_continue, close)) => {
+                            let version = if raw_request.version.unwrap() == 1 {
+                                Version::Http11
                             } else {
-                                return Parser::intent_flush(scope);
+                                Version::Http10
+                            };
+                            let request = Head {
+                                client: client,
+                                version: version,
+                                method: raw_request.method.unwrap(),
+                                scheme: "http",
+                                path: raw_request.path.unwrap(),
+                                headers: raw_request.headers,
+                                body_kind: body,
+                            };
+                            let mut response = Response::new(output,
+                                request.version, is_head, close);
+                            let triple = M::headers_received(self.1.clone(),
+                                request, &mut response, scope);
+                            if triple.is_none() && response.is_started() {
+                                if !expect_continue {
+                                    return Intent::done();
+                                } else {
+                                    return Parser::intent_flush(self.1, scope);
+                                }
+                            } else if triple.is_none() {
+                                M::emit_error_page(&HeadersReceived,
+                                    &mut response, &self.1, scope);
+                                return Parser::intent_flush(self.1, scope);
                             }
-                        } else if triple.is_none() {
-                            scope.emit_error_page(ErrorCode::BadRequest, &mut response);
-                            return Parser::intent_flush(scope);
+                            if expect_continue {
+                                response.response_continue();
+                            }
+                            (triple.unwrap(), response, body, close)
                         }
-                        if expect_continue {
-                            response.response_continue();
+                        Err(e) => {
+                            let mut response = Response::new(output,
+                                Version::Http10, false, true);
+                            M::emit_error_page(&e, &mut response,
+                                &self.1, scope);
+                            return Parser::intent_flush(self.1, scope);
                         }
-                        (triple.unwrap(), response, body, close)
-                    } else {
-                        let mut response = Response::new(output, Version::Http10, false, true);
-                        scope.emit_error_page(ErrorCode::BadRequest, &mut response);
-                        return Parser::intent_flush(scope);
                     }
                 };
                 input.consume(n);
-                return Parser::intent_body(ReadBody {
+                return Parser::intent_body(self.1, ReadBody {
                     machine: Some(machine),
                     deadline: deadline,
                     progress: start_body(mode, body),
@@ -340,19 +361,21 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                                 if off as u64 + chunk_len > limit as u64 {
                                     inp.consume(lenstart + end + 2);
                                     rb.machine.map(|m| m.bad_request(&mut resp, scope));
-                                    scope.emit_error_page(ErrorCode::BadRequest, &mut resp);
-                                    return Parser::intent_flush(scope);
+                                    M::emit_error_page(&PayloadTooLarge,
+                                        &mut resp, &self.1, scope);
+                                    return Parser::intent_flush(self.1, scope);
                                 }
                                 inp.remove_range(off..lenstart + end + 2);
                                 (rb.machine,
                                  Some(BufferChunked(limit, off, chunk_len as usize)))
                             }
                             Ok(Partial) => unreachable!(),
-                            Err(_) => {
+                            Err(e) => {
                                 inp.consume(lenstart + end + 2);
                                 rb.machine.map(|m| m.bad_request(&mut resp, scope));
-                                scope.emit_error_page(ErrorCode::BadRequest, &mut resp);
-                                return Parser::intent_flush(scope);
+                                M::emit_error_page(&RequestError::from(e),
+                                    &mut resp, &self.1, scope);
+                                return Parser::intent_flush(self.1, scope);
                             }
                         }
                     }
@@ -397,11 +420,12 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                                 (rb.machine, Some(ProgressiveChunked(hint, off, chunk_len)))
                             }
                             Ok(Partial) => unreachable!(),
-                            Err(_) => {
+                            Err(e) => {
                                 inp.consume(off + end + 2);
                                 rb.machine.map(|m| m.bad_request(&mut resp, scope));
-                                scope.emit_error_page(ErrorCode::BadRequest, &mut resp);
-                                return Parser::intent_flush(scope);
+                                M::emit_error_page(&RequestError::from(e),
+                                    &mut resp, &self.1, scope);
+                                return Parser::intent_flush(self.1, scope);
                             }
                         }
                     }
@@ -428,7 +452,7 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                 };
                 match progress {
                     Some(p) => {
-                        Parser::intent_body(ReadBody {
+                        Parser::intent_body(self.1, ReadBody {
                             machine: m,
                             deadline: rb.deadline,
                             progress: p,
@@ -436,15 +460,16 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                             connection_close: rb.connection_close,
                         })
                     }
-                    None => Parser::complete(scope, m, resp, rb.connection_close, rb.deadline),
+                    None => Parser::complete(self.1, scope,
+                        m, resp, rb.connection_close, rb.deadline),
                 }
             }
             Processing(m, r, c, dline) => {
-                Intent::of(Processing(m, r, c, dline).wrap())
+                Intent::of(Processing(m, r, c, dline).wrap(self.1))
                     .sleep().deadline(dline)
             },
             /// TODO(tailhook) fix output timeout
-            DoneResponse => Parser::intent_flush(scope),
+            DoneResponse => Parser::intent_flush(self.1, scope),
         }
     }
     fn bytes_flushed(self,
@@ -461,20 +486,23 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                scope: &mut Scope<Self::Context>)
                -> Intent<Self> {
         use self::ParserImpl::*;
+        use super::RequestError::*;
         match self.0 {
             Idle | DoneResponse => Intent::done(),
             ReadHeaders => {
                 let output = transport.output();
-                let mut response = Response::new(output, Version::Http10, false, true);
-                scope.emit_error_page(ErrorCode::RequestTimeout, &mut response);
-                Parser::intent_flush(scope)
+                let mut response = Response::new(output,
+                    Version::Http10, false, true);
+                M::emit_error_page(&HeadersTimeout, &mut response,
+                    &self.1, scope);
+                Parser::intent_flush(self.1, scope)
             }
             ReadingBody(rb) => {
                 let mut resp = rb.response.with(transport.output());
                 let res = rb.machine.and_then(|m| m.timeout(&mut resp, scope));
                 match res {
                     Some((m, deadline)) => {
-                        Parser::intent_body(ReadBody {
+                        Parser::intent_body(self.1, ReadBody {
                             machine: Some(m),
                             deadline: deadline,
                             progress: rb.progress,
@@ -484,8 +512,9 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                     }
                     None => {
                         if !resp.is_started() {
-                            scope.emit_error_page(ErrorCode::RequestTimeout, &mut resp);
-                            Parser::intent_flush(scope)
+                            M::emit_error_page(&RequestTimeout, &mut resp,
+                                &self.1, scope);
+                            Parser::intent_flush(self.1, scope)
                         } else {
                             Intent::done()
                         }
@@ -495,11 +524,13 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
             Processing(m, respimp, close, _) => {
                 let mut resp = respimp.with(transport.output());
                 match m.timeout(&mut resp, scope) {
-                    Some((m, dline)) => Parser::complete(scope, Some(m), resp, close, dline),
+                    Some((m, dline)) => Parser::complete(self.1,
+                                          scope, Some(m), resp, close, dline),
                     None => {
                         if !resp.is_started() {
-                            scope.emit_error_page(ErrorCode::RequestTimeout, &mut resp);
-                            Parser::intent_flush(scope)
+                            M::emit_error_page(&HandlerTimeout, &mut resp,
+                                &self.1, scope);
+                            Parser::intent_flush(self.1, scope)
                         } else {
                             Intent::done()
                         }
@@ -514,13 +545,14 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
               -> Intent<Self> {
         use self::ParserImpl::*;
         match self.0 {
-            Idle => Parser::intent_idle(scope),
-            ReadHeaders => Parser::intent_headers(scope, transport.input().len()),
-            DoneResponse => Parser::intent_flush(scope),
+            Idle => Parser::intent_idle(self.1, scope),
+            ReadHeaders => Parser::intent_headers(self.1, scope,
+                    transport.input().len()),
+            DoneResponse => Parser::intent_flush(self.1, scope),
             ReadingBody(rb) => {
                 let mut resp = rb.response.with(transport.output());
                 let m = rb.machine.and_then(|m| m.wakeup(&mut resp, scope));
-                Parser::intent_body(ReadBody {
+                Parser::intent_body(self.1, ReadBody {
                     machine: m,
                     deadline: rb.deadline,
                     progress: rb.progress,
@@ -531,7 +563,7 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
             Processing(m, respimp, close, dline) => {
                 let mut resp = respimp.with(transport.output());
                 let mres = m.wakeup(&mut resp, scope);
-                Parser::complete(scope, mres, resp, close, dline)
+                Parser::complete(self.1, scope, mres, resp, close, dline)
             }
         }
     }
@@ -544,19 +576,21 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
         use rotor_stream::Exception::*;
         use self::BodyProgress::*;
         use self::ParserImpl::*;
+        use super::error::RequestError::*;
         match reason {
             LimitReached => {
                 if let ReadingBody(rb) = self.0 {
                     assert!(matches!(rb.progress,
-                        ProgressiveChunked(_, _, 0) |
+                        ProgressiveChunked(_, _, 0) |  // TODO(tailhook) why?
                         BufferChunked(_, _, 0)));
                     let mut resp = rb.response.with(transport.output());
                     rb.machine.map(|m| m.bad_request(&mut resp, scope));
                     if !resp.is_started() {
-                        scope.emit_error_page(ErrorCode::BadRequest, &mut resp);
+                        M::emit_error_page(&PayloadTooLarge, &mut resp,
+                            &self.1, scope);
                     }
                     if resp.is_complete() {
-                        return Parser::intent_flush(scope)
+                        return Parser::intent_flush(self.1, scope)
                     }
                 }
             }
@@ -565,10 +599,11 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
                     let mut resp = rb.response.with(transport.output());
                     rb.machine.map(|m| m.bad_request(&mut resp, scope));
                     if !resp.is_started() {
-                        scope.emit_error_page(ErrorCode::BadRequest, &mut resp);
+                        M::emit_error_page(&PrematureEndOfStream,
+                            &mut resp, &self.1, scope);
                     }
                     if resp.is_complete() {
-                        return Parser::intent_flush(scope);
+                        return Parser::intent_flush(self.1, scope);
                     }
                 }
             }
@@ -600,8 +635,6 @@ mod test {
         requests_received: usize,
     }
 
-    impl super::super::Context for Context {}
-
     #[derive(Debug, PartialEq, Eq)]
     pub enum Proto {
         Reading,
@@ -609,8 +642,9 @@ mod test {
     }
 
     impl Server for Proto {
+        type Seed = ();
         type Context = Context;
-        fn headers_received(_head: Head, _response: &mut Response,
+        fn headers_received((): (), _head: Head, _response: &mut Response,
             scope: &mut Scope<Self::Context>)
             -> Option<(Self, RecvMode, Time)>
         {
@@ -665,7 +699,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nContent-Length: 0\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -683,7 +717,7 @@ mod test {
         let mut lp = MockLoop::new(Default::default());
         io.push_bytes("GET / HTTP/1.1\r\nContent-".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -712,7 +746,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -723,8 +757,8 @@ mod test {
             requests_received: 0,
         });
         io.push_bytes("0\r\n\r\n".as_bytes());
-        m.ready(EventSet::readable(), &mut lp.scope(1));
-            //.expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
         assert_eq!(*lp.ctx(), Context {
             progressive: false,
             headers_received: 1,
@@ -741,7 +775,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -770,7 +804,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -808,7 +842,7 @@ mod test {
         io.push_bytes("GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\
                        Connection: close\r\n\r\n".as_bytes());
         let m = Stream::<Parser<Proto, MemIo>>::accepted(
-            io.clone(), &mut lp.scope(1)).expect_machine();
+            io.clone(), (), &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
@@ -846,8 +880,9 @@ mod test {
             Content-Length: 0\n\
             Connection: close\n\n"
                           .as_bytes());
-        let m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                    .expect_machine();
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), (), &mut lp.scope(1))
+            .expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
          .expect_machine();
         assert_eq!(*lp.ctx(),
@@ -867,8 +902,9 @@ mod test {
         io.push_bytes("\r\nGET /foo HTTP/1.1\r\n\
             Host: example.com\r\n\r\n"
                           .as_bytes());
-        let m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                    .expect_machine();
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), (), &mut lp.scope(1))
+            .expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
          .expect_machine();
         assert_eq!(*lp.ctx(),
@@ -886,8 +922,9 @@ mod test {
         let mut io = MemIo::new();
         let mut lp = MockLoop::new(Default::default());
         io.push_bytes("~36!$543&..JKLHfF+Dkjk /foo/$bar HTTP/1.1\r\n\r\n".as_bytes());
-        let m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                    .expect_machine();
+        let m = Stream::<Parser<Proto, MemIo>>::accepted(
+            io.clone(), (), &mut lp.scope(1))
+            .expect_machine();
         m.ready(EventSet::readable(), &mut lp.scope(1))
          .expect_machine();
         assert_eq!(*lp.ctx(),
@@ -907,8 +944,9 @@ mod test {
         let mut counter = 0;
         b.iter(|| {
             counter += 1;
-            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                            .expect_machine();
+            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(
+                io.clone(), (), &mut lp.scope(1))
+                .expect_machine();
             io.push_bytes("GET / HTTP/1.1\r\n");
             io.push_bytes("Host: blog.nemo.org\r\n");
             io.push_bytes("User-Agent: Mozilla/5.0 (X11; Linux x86_64");
@@ -947,8 +985,9 @@ mod test {
         let mut counter = 0;
         b.iter(|| {
             counter += 1;
-            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(io.clone(), &mut lp.scope(1))
-                            .expect_machine();
+            let mut m = Stream::<Parser<Proto, MemIo>>::accepted(
+                io.clone(), (), &mut lp.scope(1))
+                .expect_machine();
             io.push_bytes("GET / HTTP/1.1\r\n");
             m = m.ready(EventSet::readable(), &mut lp.scope(1)).expect_machine();
             io.push_bytes("Host: blog.nemo.org\r\n");

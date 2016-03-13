@@ -8,9 +8,10 @@ use rotor_stream::{Protocol, StreamSocket};
 use rotor_stream::{Intent, Expectation as E, Transport};
 use rotor_stream::Buf;
 use httparse;
+use httparse::parse_chunk_size;
 
 use super::{MAX_HEADERS_SIZE, MAX_HEADERS_NUM, MAX_CHUNK_HEAD};
-use super::{Client, Requester, Connection, Task};
+use super::{Client, Requester, Connection, Task, ResponseError};
 use super::head::Head;
 use super::request::{Request, state};
 use super::head::BodyKind;
@@ -38,6 +39,7 @@ pub enum BodyProgress {
     ProgressiveChunked(usize, usize, u64),
 }
 
+#[derive(Debug)]
 pub struct Parser<M, S>(M, ParserImpl<M::Requester>, PhantomData<*const S>)
     where M: Client, S: StreamSocket;
 
@@ -149,6 +151,15 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     }
     Ok((result, close))
 }
+
+#[inline]
+fn consumed(off: usize) -> usize {
+    // If buffer is not empty it has final '\r\n' at the
+    // end, and we are going to search for the next pair
+    // But the `off` is stored as a number of useful bytes in the buffer
+    if off > 0 { off+2 } else { 0 }
+}
+
 fn start_body(mode: RecvMode, body: BodyKind) -> BodyProgress {
     use recvmode::RecvMode::*;
     use super::head::BodyKind::*;
@@ -260,9 +271,11 @@ impl<M: Requester> ParserImpl<M> {
                 let exp = match *progress {
                     BufferFixed(x) => Bytes(x),
                     BufferEOF(x) => Bytes(x),
-                    BufferChunked(_, off, 0)
-                    => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
-                    BufferChunked(_, off, y) => Bytes(off + y),
+                    BufferChunked(_, off, 0) => {
+                        Delimiter(consumed(off), b"\r\n",
+                                  consumed(off) + MAX_CHUNK_HEAD)
+                    }
+                    BufferChunked(_, off, y) => Bytes(off + y + 2),
                     ProgressiveFixed(hint, left)
                     => Bytes(min(hint as u64, left) as usize),
                     ProgressiveEOF(hint) => Bytes(hint),
@@ -292,7 +305,7 @@ fn maybe_new_request<M: Client, S: StreamSocket>(
         Task::Request(cli, m) => (cli, m)
     };
     let mut req = Request::new(transport.output());
-    match m.prepare_request(&mut req) {
+    match m.prepare_request(&mut req, scope) {
         Some(m) => {
             let deadline = scope.now() + m.byte_timeout(scope);
             Intent::of(Parser(cli, ParserImpl::ReadHeaders {
@@ -327,6 +340,7 @@ impl<M, S> Protocol for Parser<M, S>
     {
         use self::ParserImpl::*;
         use self::BodyProgress::*;
+        use super::ResponseError::*;
         match self.1 {
             ReadHeaders { machine, request, is_head } => {
                 let (inb, outb) = transport.buffers();
@@ -339,6 +353,7 @@ impl<M, S> Protocol for Parser<M, S>
                 }
             }
             Response { progress, machine, deadline, request }  => {
+                use httparse::Status::*;
                 let (inp, out) = transport.buffers();
                 let mut req = request.with(out);
                 let (m, progress) = match progress {
@@ -350,40 +365,43 @@ impl<M, S> Protocol for Parser<M, S>
                     }
                     BufferEOF(_) => unreachable!(),
                     BufferChunked(limit, off, 0) => {
-                        let clen_end = inp[off..end].iter()
-                            .position(|&x| x == b';')
-                            .map_or(end, |x| x + off);
-                        let val_opt = from_utf8(&inp[off..clen_end]).ok()
-                            .and_then(|x| u64::from_str_radix(x, 16).ok());
-                        match val_opt {
-                            Some(0) => {
-                                inp.remove_range(off..end+2);
+                        let lenstart = consumed(off);
+                        match parse_chunk_size(
+                            &inp[lenstart..lenstart + end + 2])
+                        {
+                            Ok(Complete((_, 0))) => {
+                                inp.remove_range(off..lenstart + end + 2);
                                 machine.response_received(
                                     &inp[..off], &mut req, scope);
                                 inp.consume(off);
                                 return Parser::finish(self.0, req, scope);
                             }
-                            Some(chunk_len) => {
+                            Ok(Complete((_, chunk_len))) => {
                                 if off as u64 + chunk_len > limit as u64 {
                                     inp.consume(end+2);
-                                    machine.bad_response(scope);
+                                    machine.bad_response(
+                                        &ChunkIsTooLarge(
+                                            off as u64 + chunk_len, limit),
+                                        scope);
                                     return Intent::done();
                                 }
-                                inp.remove_range(off..end+2);
+                                inp.remove_range(off..lenstart + end + 2);
                                 (Some(machine),
                                  BufferChunked(limit, off, chunk_len as usize))
                             }
-                            None => {
+                            Ok(Partial) => unreachable!(),
+                            Err(e) => {
                                 inp.consume(end+2);
-                                machine.bad_response(scope);
+                                machine.bad_response(&ResponseError::from(e),
+                                                     scope);
                                 return Intent::done();
                             }
                         }
                     }
                     BufferChunked(limit, off, bytes) => {
-                        debug_assert!(bytes == end);
+                        debug_assert_eq!(off + bytes, end - 2);
                         (Some(machine),
-                         BufferChunked(limit, off+bytes, 0))
+                         BufferChunked(limit, off + bytes, 0))
                     }
                     ProgressiveFixed(hint, mut left) => {
                         let real_bytes = min(inp.len() as u64, left) as usize;
@@ -405,13 +423,9 @@ impl<M, S> Protocol for Parser<M, S>
                         (m, ProgressiveEOF(hint))
                     }
                     ProgressiveChunked(hint, off, 0) => {
-                        let clen_end = inp[off..end].iter()
-                            .position(|&x| x == b';')
-                            .map_or(end, |x| x + off);
-                        let val_opt = from_utf8(&inp[off..clen_end]).ok()
-                            .and_then(|x| u64::from_str_radix(x, 16).ok());
-                        match val_opt {
-                            Some(0) => {
+                        use httparse::Status::*;
+                        match parse_chunk_size(&inp[off..off + end + 2]) {
+                            Ok(Complete((_, 0))) => {
                                 inp.remove_range(off..end+2);
                                 let m = machine.response_chunk(
                                     &inp[..off], &mut req, scope);
@@ -419,14 +433,16 @@ impl<M, S> Protocol for Parser<M, S>
                                 inp.consume(off);
                                 return Parser::finish(self.0, req, scope);
                             }
-                            Some(chunk_len) => {
+                            Ok(Complete((_, chunk_len))) => {
                                 inp.remove_range(off..end+2);
                                 (Some(machine),
                                  ProgressiveChunked(hint, off, chunk_len))
                             }
-                            None => {
+                            Ok(Partial) => unreachable!(),
+                            Err(e) => {
                                 inp.consume(end+2);
-                                machine.bad_response(scope);
+                                machine.bad_response(&ResponseError::from(e),
+                                                     scope);
                                 return Intent::done();
                             }
                         }
@@ -523,5 +539,243 @@ impl<M, S> Protocol for Parser<M, S>
                 unimplemented!();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::Duration;
+    use rotor::{Scope, EventSet, Time, Machine};
+    use rotor_test::{MemIo, MockLoop};
+    use client::{Client, Requester, Connection, Task, Request, Version};
+    use client::{Head, RecvMode, Fsm, ResponseError};
+
+    #[derive(Debug, Default, PartialEq, Eq)]
+    struct Context {
+        requests: usize,
+        headers_received: usize,
+        responses_received: usize,
+        chunks_received: usize,
+        bytes_received: usize,
+        errors: usize,
+    }
+
+    #[derive(Debug)]
+    struct Cli(usize);
+    #[derive(Debug)]
+    struct Req;
+
+    impl Client for Cli {
+        type Requester = Req;
+        type Seed = usize;
+        fn create(seed: Self::Seed,
+            _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+            -> Self
+        {
+            Cli(seed)
+        }
+        fn connection_idle(mut self, _conn: &Connection,
+            scope: &mut Scope<Context>)
+            -> Task<Cli>
+        {
+            if self.0 > 0 {
+                self.0 -= 1;
+                Task::Request(self, Req)
+            } else {
+                Task::Sleep(self, scope.now() + Duration::new(100, 0))
+            }
+        }
+        fn wakeup(self,
+            _connection: &Connection,
+            _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+            -> Task<Cli>
+        {
+            unimplemented!();
+        }
+        fn timeout(self,
+            _connection: &Connection,
+            _scope: &mut Scope<<Self::Requester as Requester>::Context>)
+            -> Task<Cli>
+        {
+            unimplemented!();
+        }
+    }
+
+    impl Requester for Req {
+        type Context = Context;
+        fn prepare_request(self, req: &mut Request,
+            scope: &mut Scope<Self::Context>)
+            -> Option<Self>
+        {
+            scope.requests += 1;
+            req.start("GET", "/", Version::Http11);
+            req.add_header("Host", b"localhost").unwrap();
+            req.done_headers().unwrap();
+            req.done();
+            Some(self)
+        }
+        fn headers_received(self, _head: Head, _request: &mut Request,
+            scope: &mut Scope<Self::Context>)
+            -> Option<(Self, RecvMode, Time)>
+        {
+            scope.headers_received += 1;
+            Some((self,  RecvMode::Buffered(16386),
+                scope.now() + Duration::new(1000, 0)))
+        }
+        fn response_received(self, data: &[u8], _request: &mut Request,
+            scope: &mut Scope<Self::Context>)
+        {
+            scope.bytes_received += data.len();
+            scope.responses_received += 1;
+        }
+        fn response_chunk(self, _chunk: &[u8], _request: &mut Request,
+            _scope: &mut Scope<Self::Context>)
+            -> Option<Self>
+        {
+            unreachable!();
+        }
+        fn response_end(self, _request: &mut Request,
+            _scope: &mut Scope<Self::Context>)
+        {
+            unreachable!();
+        }
+        fn timeout(self, _request: &mut Request,
+            _scope: &mut Scope<Self::Context>)
+            -> Option<(Self, Time)>
+        {
+            unreachable!();
+        }
+        fn wakeup(self, _request: &mut Request,
+            _scope: &mut Scope<Self::Context>)
+            -> Option<Self>
+        {
+            unimplemented!();
+        }
+        fn bad_response(self, _error: &ResponseError,
+            scope: &mut Scope<Self::Context>)
+        {
+            scope.errors += 1;
+        }
+    }
+
+    #[test]
+    fn test_zero_body() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\
+                       Connection: close\r\n\r\n".as_bytes());
+        let m = Fsm::<Cli, MemIo>::connected(
+            io.clone(), 1, &mut lp.scope(1)).expect_machine();
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 1,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
+        });
+    }
+
+    #[test]
+    fn test_empty_chunked() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\
+                       Connection: close\r\n\r\n".as_bytes());
+        let m = Fsm::<Cli, MemIo>::connected(
+            io.clone(), 1, &mut lp.scope(1)).expect_machine();
+        let m = m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 0,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
+        });
+        io.push_bytes("0\r\n\r\n".as_bytes());
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 1,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
+        });
+    }
+
+    #[test]
+    fn test_one_chunk() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\
+                       Connection: close\r\n\r\n".as_bytes());
+        let m = Fsm::<Cli, MemIo>::connected(
+            io.clone(), 1, &mut lp.scope(1)).expect_machine();
+        let m = m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 0,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
+        });
+        io.push_bytes("5\r\nrotor\r\n0\r\n\r\n".as_bytes());
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 1,
+            chunks_received: 0,
+            bytes_received: 5,
+            errors: 0,
+        });
+    }
+
+    #[test]
+    fn test_chunked_encoding() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(Default::default());
+        io.push_bytes("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\
+                       Connection: close\r\n\r\n".as_bytes());
+        let m = Fsm::<Cli, MemIo>::connected(
+            io.clone(), 1, &mut lp.scope(1)).expect_machine();
+        let m = m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 0,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
+        });
+        io.push_bytes("4\r\n\
+                       Wiki\r\n\
+                       5\r\n\
+                       pedia\r\n\
+                       E\r\n in\r\n\
+                       \r\n\
+                       chunks.\r\n\
+                       0\r\n\
+                       \r\n".as_bytes());
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            requests: 1,
+            headers_received: 1,
+            responses_received: 1,
+            chunks_received: 0,
+            bytes_received: 23,
+            errors: 0,
+        });
     }
 }

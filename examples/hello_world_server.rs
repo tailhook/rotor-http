@@ -22,14 +22,6 @@ impl Counter for Context {
     fn get(&self) -> usize { self.counter }
 }
 
-impl rotor_http::server::Context for Context {
-    // default impl is okay
-    fn byte_timeout(&self) -> Duration {
-        Duration::new(1000, 0)
-    }
-}
-
-
 #[derive(Debug, Clone)]
 enum HelloWorld {
     Hello,
@@ -47,8 +39,9 @@ fn send_string(res: &mut Response, data: &[u8]) {
 }
 
 impl Server for HelloWorld {
+    type Seed = ();
     type Context = Context;
-    fn headers_received(head: Head, _res: &mut Response,
+    fn headers_received(_seed: (), head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<(Self, RecvMode, Time)>
     {
@@ -124,7 +117,7 @@ fn main() {
     });
     let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     loop_inst.add_machine_with(|scope| {
-        Fsm::<HelloWorld, _>::new(lst, scope)
+        Fsm::<HelloWorld, _>::new(lst, (), scope)
     }).unwrap();
     loop_inst.run().unwrap();
 }

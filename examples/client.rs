@@ -1,23 +1,31 @@
 extern crate rotor;
 extern crate rotor_http;
+extern crate argparse;
+extern crate url;
+extern crate env_logger;
 
-use std::io::stdout;
+
+use std::io::{stdout, stderr};
 use std::io::Write;
 use std::net::ToSocketAddrs;
 use std::time::Duration;
+use std::process::exit;
 
+use url::Url;
+use url::SchemeData::Relative;
+use argparse::{ArgumentParser, Store};
 use rotor::{Scope, Time};
-use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode,
-    Connection, Requester, Task, Version};
+use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
+use rotor_http::client::{Connection, Requester, Task, Version, ResponseError};
 
 struct Context;
 
-struct Cli(Option<String>);
-struct Req(String);
+struct Cli(Option<Url>);
+struct Req(Url);
 
 impl Client for Cli {
     type Requester = Req;
-    type Seed = String;
+    type Seed = Url;
     fn create(seed: Self::Seed,
         _scope: &mut Scope<<Self::Requester as Requester>::Context>)
         -> Self
@@ -29,7 +37,7 @@ impl Client for Cli {
         -> Task<Cli>
     {
         match self.0.take() {
-            Some(req) => Task::Request(Cli(None), Req(req)),
+            Some(url) => Task::Request(Cli(None), Req(url)),
             None => {
                 scope.shutdown_loop();
                 Task::Close
@@ -54,8 +62,12 @@ impl Client for Cli {
 
 impl Requester for Req {
     type Context = Context;
-    fn prepare_request(self, req: &mut Request) -> Option<Self> {
-        req.start("GET", &self.0, Version::Http11);
+    fn prepare_request(self, req: &mut Request,
+        _scope: &mut Scope<Self::Context>)
+        -> Option<Self>
+    {
+        req.start("GET", &self.0.serialize_path().unwrap(), Version::Http11);
+        req.add_header("Host", self.0.domain().unwrap().as_bytes()).unwrap();
         req.done_headers().unwrap();
         req.done();
         Some(self)
@@ -70,7 +82,7 @@ impl Requester for Req {
             println!("{}: {}", header.name,
                 String::from_utf8_lossy(header.value));
         }
-        Some((self,  RecvMode::Buffered(16386),
+        Some((self,  RecvMode::Buffered(1 << 20),
             scope.now() + Duration::new(1000, 0)))
     }
     fn response_received(self, data: &[u8], _request: &mut Request,
@@ -103,17 +115,40 @@ impl Requester for Req {
     {
         unimplemented!();
     }
+    fn bad_response(self, err: &ResponseError, _scope: &mut Scope<Context>)
+    {
+        writeln!(&mut stderr(), "----- Bad response: {} -----", err).ok();
+        exit(1);
+    }
 }
 
 
 fn main() {
+    env_logger::init().unwrap();
+    let mut url = Url::parse(
+        "http://info.cern.ch/hypertext/WWW/TheProject.html").unwrap();
+    {
+        let mut ap = ArgumentParser::new();
+        ap.refer(&mut url)
+            .add_argument("url", Store, "Url to fetch");
+        ap.parse_args_or_exit();
+    }
+    if &url.scheme != "http" {
+        writeln!(&mut stderr(), "Only 'http://' urls are supported for now")
+            .ok();
+        exit(1);
+    }
+    let addr = match url.scheme_data {
+        Relative(ref scheme) => {
+            (scheme.domain().unwrap(), scheme.port_or_default().unwrap())
+                .to_socket_addrs().unwrap().next().unwrap()
+        }
+        _ => unreachable!(),
+    };
     let creator = rotor::Loop::new(&rotor::Config::new()).unwrap();
     let mut loop_inst = creator.instantiate(Context);
     loop_inst.add_machine_with(|scope| {
-        connect_tcp::<Cli>(scope,
-            &("google.com", 80).to_socket_addrs()
-                .unwrap().collect::<Vec<_>>()[0],
-            format!("/"))
+        connect_tcp::<Cli>(scope, &addr, url)
     }).unwrap();
     loop_inst.run().unwrap();
 }

@@ -32,10 +32,6 @@ struct Incr;
 
 struct Get;
 
-impl rotor_http::server::Context for Context {
-    // default impl is okay
-}
-
 fn send_string(res: &mut Response, data: &[u8]) {
     res.status(200, "OK");
     res.add_length(data.len() as u64).unwrap();
@@ -45,8 +41,9 @@ fn send_string(res: &mut Response, data: &[u8]) {
 }
 
 impl Server for Incr {
+    type Seed = ();
     type Context = Context;
-    fn headers_received(_head: Head, _res: &mut Response,
+    fn headers_received(_seed: (), _head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<(Self, RecvMode, Time)>
     {
@@ -88,8 +85,9 @@ impl Server for Incr {
 }
 
 impl Server for Get {
+    type Seed = ();
     type Context = Context;
-    fn headers_received(_head: Head, _res: &mut Response,
+    fn headers_received(_seed: (), _head: Head, _res: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<(Self, RecvMode, Time)>
     {
@@ -140,10 +138,10 @@ fn main() {
         counter: 0,
     });
     loop_inst.add_machine_with(|scope| {
-        Fsm::<Incr, _>::new(lst1, scope).wrap(Compose2::A)
+        Fsm::<Incr, _>::new(lst1, (), scope).wrap(Compose2::A)
     }).unwrap();
     loop_inst.add_machine_with(|scope| {
-        Fsm::<Get, _>::new(lst2, scope).wrap(Compose2::B)
+        Fsm::<Get, _>::new(lst2, (), scope).wrap(Compose2::B)
     }).unwrap();
     loop_inst.run().unwrap();
 }

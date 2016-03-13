@@ -68,11 +68,6 @@ impl MessageState {
     {
         Message(out_buf, self).into()
     }
-    pub fn is_started(&self) -> bool {
-        !matches!(*self,
-            MessageState::RequestStart |
-            MessageState::ResponseStart { .. })
-    }
 }
 
 impl<'a> Message<'a> {

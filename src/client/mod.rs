@@ -18,11 +18,13 @@ mod head;
 mod protocol;
 mod parser;
 mod connection;
+mod error;
 
 pub use version::Version;
 pub use self::request::{Request};
 pub use self::protocol::{Client, Requester, Task};
 pub use self::head::Head;
+pub use self::error::ResponseError;
 pub use recvmode::RecvMode;
 
 use self::parser::Parser;

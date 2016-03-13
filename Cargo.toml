@@ -13,7 +13,7 @@ authors = ["paul@colomiets.name", "pyfisch@gmail.com"]
 [dependencies]
 httparse = "1.1"
 rotor = "0.6.1"
-rotor-stream = "0.5.1"
+rotor-stream = {rev="1d0b856", git="git://github.com/tailhook/rotor-stream"}
 quick-error = "1.0.0"
 matches = "0.1"
 serde = { version = "0.7", optional = true }
@@ -24,6 +24,9 @@ serde_macros = { version = "0.7", optional = true }
 libc = "0.1"
 net2 = "0.2"
 rotor-test = "0.1.0"
+url = "0.5.7"
+argparse = "0.2.1"
+env_logger = "0.3.2"
 
 [lib]
 name = "rotor_http"

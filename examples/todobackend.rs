@@ -88,9 +88,6 @@ struct Context {
 }
 
 #[cfg(feature="nightly")]
-impl server::Context for Context {}
-
-#[cfg(feature="nightly")]
 trait Database {
     /// Get a unique new id.
     fn id(&mut self) -> u64;
@@ -161,8 +158,9 @@ enum TodoBackend {
 
 #[cfg(feature="nightly")]
 impl Server for TodoBackend {
+    type Seed = ();
     type Context = Context;
-    fn headers_received(head: Head, _response: &mut Response,
+    fn headers_received(_seed: (), head: Head, _response: &mut Response,
         scope: &mut Scope<Context>)
         -> Option<(Self, RecvMode, Time)>
     {
@@ -301,7 +299,7 @@ fn main() {
     });
     let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     loop_inst.add_machine_with(|scope| {
-        Fsm::<TodoBackend, _>::new(lst, scope)
+        Fsm::<TodoBackend, _>::new(lst, (), scope)
     }).unwrap();
     loop_inst.run().unwrap();
 }
