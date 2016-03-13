@@ -11,7 +11,7 @@ use std::net::ToSocketAddrs;
 use std::time::Duration;
 use std::process::exit;
 
-use url::Url;
+use url::{Url, Host};
 use url::SchemeData::Relative;
 use argparse::{ArgumentParser, Store};
 use rotor::{Scope, Time};
@@ -67,7 +67,7 @@ impl Requester for Req {
         -> Option<Self>
     {
         req.start("GET", &self.0.serialize_path().unwrap(), Version::Http11);
-        req.add_header("Host", self.0.domain().unwrap().as_bytes()).unwrap();
+        req.add_header("Host", self.0.serialize_host().unwrap().as_bytes()).unwrap();
         req.done_headers().unwrap();
         req.done();
         Some(self)
@@ -140,8 +140,13 @@ fn main() {
     }
     let addr = match url.scheme_data {
         Relative(ref scheme) => {
-            (scheme.domain().unwrap(), scheme.port_or_default().unwrap())
-                .to_socket_addrs().unwrap().next().unwrap()
+            // Can't implement as trait because of E0117
+            let port = scheme.port_or_default().unwrap();
+            match scheme.host {
+                Host::Domain(ref d) => (d.as_str(), port).to_socket_addrs().unwrap().next().unwrap(),
+                Host::Ipv4(ref a) => (*a, port).to_socket_addrs().unwrap().next().unwrap(),
+                Host::Ipv6(ref a) => (*a, port).to_socket_addrs().unwrap().next().unwrap(),
+            }
         }
         _ => unreachable!(),
     };
