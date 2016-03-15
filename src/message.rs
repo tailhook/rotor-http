@@ -352,7 +352,7 @@ impl<'a> Message<'a> {
     /// Works both for fixed-size body and chunked body.
     ///
     /// For the chunked body each chunk is put into the buffer immediately
-    /// prefixed by chunk size.
+    /// prefixed by chunk size. Empty chunks are ignored.
     ///
     /// For both modes chunk is put into the buffer, but is only sent when
     /// rotor-stream state machine is reached. So you may put multiple chunks
@@ -383,10 +383,11 @@ impl<'a> Message<'a> {
                 self.0.write(data).unwrap();
                 *x -= data.len() as u64;
             }
-            ChunkedBody => {
+            ChunkedBody => if data.len() > 0 {
                 write!(self.0, "{:x}\r\n", data.len()).unwrap();
                 self.0.write(data).unwrap();
-            }
+                self.0.write(b"\r\n").unwrap();
+            },
             ref state => {
                 panic!("Called write_body() method on message \
                     in a state {:?}", state)
@@ -411,7 +412,7 @@ impl<'a> Message<'a> {
         use self::MessageState::*;
         match self.1 {
             ChunkedBody => {
-                self.0.write(b"0\r\n").unwrap();
+                self.0.write(b"0\r\n\r\n").unwrap();
                 self.1 = Done;
             }
             FixedSizeBody(0) => self.1 = Done,
