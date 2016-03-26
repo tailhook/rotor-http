@@ -292,6 +292,7 @@ impl Server for TodoBackend {
 
 #[cfg(feature="nightly")]
 fn main() {
+    println!("Starting http server on http://127.0.0.1:3000/");
     let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
     let mut loop_inst = event_loop.instantiate(Context {
         last_id: 0,

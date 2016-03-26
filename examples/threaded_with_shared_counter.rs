@@ -118,6 +118,7 @@ impl Server for HelloWorld {
 }
 
 fn main() {
+    println!("Starting http server on http://127.0.0.1:3000/");
     let lst = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     let threads = env::var("THREADS").unwrap_or("2".to_string())
         .parse().unwrap();
