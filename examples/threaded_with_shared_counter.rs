@@ -21,12 +21,12 @@ struct Context {
 }
 
 trait Counter {
-    fn increment(&mut self);
+    fn increment(&self);
     fn get(&self) -> usize;
 }
 
 impl Counter for Context {
-    fn increment(&mut self) { self.counter.fetch_add(1, Ordering::SeqCst); }
+    fn increment(&self) { self.counter.fetch_add(1, Ordering::SeqCst); }
     fn get(&self) -> usize { self.counter.load(Ordering::SeqCst) }
 }
 
