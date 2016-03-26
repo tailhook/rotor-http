@@ -131,6 +131,7 @@ impl Server for Get {
 }
 
 fn main() {
+    println!("Starting http servers on http://127.0.0.1:3000/ and http://127.0.0.1:3001/");
     let lst1 = TcpListener::bind(&"127.0.0.1:3000".parse().unwrap()).unwrap();
     let lst2 = TcpListener::bind(&"127.0.0.1:3001".parse().unwrap()).unwrap();
     let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
