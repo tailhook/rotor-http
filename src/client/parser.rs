@@ -282,7 +282,7 @@ impl<M: Requester> ParserImpl<M> {
                     ProgressiveChunked(_, off, 0)
                     => Delimiter(off, b"\r\n", off+MAX_CHUNK_HEAD),
                     ProgressiveChunked(hint, off, left)
-                    => Bytes(min(hint as u64, off as u64 +left) as usize)
+                    => Bytes(min(hint as u64, off as u64 +left) as usize + 2)
                 };
                 (exp, min(*deadline, scope.now() + machine.byte_timeout(scope)))
             }
@@ -426,7 +426,7 @@ impl<M, S> Protocol for Parser<M, S>
                         use httparse::Status::*;
                         match parse_chunk_size(&inp[off..off + end + 2]) {
                             Ok(Complete((_, 0))) => {
-                                inp.remove_range(off..end+2);
+                                inp.remove_range(off..off+end+2);
                                 let m = machine.response_chunk(
                                     &inp[..off], &mut req, scope);
                                 m.map(|m| m.response_end(&mut req, scope));
@@ -434,13 +434,13 @@ impl<M, S> Protocol for Parser<M, S>
                                 return Parser::finish(self.0, req, scope);
                             }
                             Ok(Complete((_, chunk_len))) => {
-                                inp.remove_range(off..end+2);
+                                inp.remove_range(off..off+end+2);
                                 (Some(machine),
                                  ProgressiveChunked(hint, off, chunk_len))
                             }
                             Ok(Partial) => unreachable!(),
                             Err(e) => {
-                                inp.consume(end+2);
+                                inp.consume(off + end + 2);
                                 machine.bad_response(&ResponseError::from(e),
                                                      scope);
                                 return Intent::done();
@@ -448,7 +448,15 @@ impl<M, S> Protocol for Parser<M, S>
                         }
                     }
                     ProgressiveChunked(hint, off, mut left) => {
-                        let ln = min(off as u64 + left, inp.len() as u64) as usize;
+                        let ln = if off as u64 + left == (end - 2) as u64 {
+                            // in progressive chunked we remove final '\r\n'
+                            // immediately to make code simpler
+                            // may be optimized later
+                            inp.remove_range(end - 2..end);
+                            off + left as usize
+                        } else {
+                            inp.len()
+                        };
                         left -= (ln - off) as u64;
                         if ln < hint {
                             (Some(machine),
@@ -552,6 +560,7 @@ mod test {
 
     #[derive(Debug, Default, PartialEq, Eq)]
     struct Context {
+        progressive: bool,
         requests: usize,
         headers_received: usize,
         responses_received: usize,
@@ -619,8 +628,13 @@ mod test {
             -> Option<(Self, RecvMode, Time)>
         {
             scope.headers_received += 1;
-            Some((self,  RecvMode::Buffered(16386),
-                scope.now() + Duration::new(1000, 0)))
+            if scope.progressive {
+                Some((Req, RecvMode::Progressive(1000),
+                    scope.now() + Duration::new(10, 0)))
+            } else {
+                Some((Req, RecvMode::Buffered(1000),
+                    scope.now() + Duration::new(10, 0)))
+            }
         }
         fn response_received(self, data: &[u8], _request: &mut Request,
             scope: &mut Scope<Self::Context>)
@@ -628,16 +642,18 @@ mod test {
             scope.bytes_received += data.len();
             scope.responses_received += 1;
         }
-        fn response_chunk(self, _chunk: &[u8], _request: &mut Request,
-            _scope: &mut Scope<Self::Context>)
+        fn response_chunk(self, chunk: &[u8], _request: &mut Request,
+            scope: &mut Scope<Self::Context>)
             -> Option<Self>
         {
-            unreachable!();
+            scope.chunks_received += 1;
+            scope.bytes_received += chunk.len();
+            Some(Req)
         }
         fn response_end(self, _request: &mut Request,
-            _scope: &mut Scope<Self::Context>)
+            scope: &mut Scope<Self::Context>)
         {
-            unreachable!();
+            scope.responses_received += 1;
         }
         fn timeout(self, _request: &mut Request,
             _scope: &mut Scope<Self::Context>)
@@ -669,6 +685,7 @@ mod test {
         m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
+            progressive: false,
             requests: 1,
             headers_received: 1,
             responses_received: 1,
@@ -689,6 +706,7 @@ mod test {
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
+            progressive: false,
             requests: 1,
             headers_received: 1,
             responses_received: 0,
@@ -700,6 +718,7 @@ mod test {
         m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
+            progressive: false,
             requests: 1,
             headers_received: 1,
             responses_received: 1,
@@ -720,6 +739,7 @@ mod test {
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
+            progressive: false,
             requests: 1,
             headers_received: 1,
             responses_received: 0,
@@ -731,6 +751,7 @@ mod test {
         m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
+            progressive: false,
             requests: 1,
             headers_received: 1,
             responses_received: 1,
@@ -751,6 +772,7 @@ mod test {
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
+            progressive: false,
             requests: 1,
             headers_received: 1,
             responses_received: 0,
@@ -770,10 +792,53 @@ mod test {
         m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
         assert_eq!(*lp.ctx(), Context {
+            progressive: false,
             requests: 1,
             headers_received: 1,
             responses_received: 1,
             chunks_received: 0,
+            bytes_received: 23,
+            errors: 0,
+        });
+    }
+
+    #[test]
+    fn test_progressive_chunked() {
+        let mut io = MemIo::new();
+        let mut lp = MockLoop::new(
+            Context { progressive: true, ..Default::default() });
+        io.push_bytes("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\
+                       Connection: close\r\n\r\n".as_bytes());
+        let m = Fsm::<Cli, MemIo>::connected(
+            io.clone(), 1, &mut lp.scope(1)).expect_machine();
+        let m = m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            progressive: true,
+            requests: 1,
+            headers_received: 1,
+            responses_received: 0,
+            chunks_received: 0,
+            bytes_received: 0,
+            errors: 0,
+        });
+        io.push_bytes("4\r\n\
+                       Wiki\r\n\
+                       5\r\n\
+                       pedia\r\n\
+                       E\r\n in\r\n\
+                       \r\n\
+                       chunks.\r\n\
+                       0\r\n\
+                       \r\n".as_bytes());
+        m.ready(EventSet::readable(), &mut lp.scope(1))
+            .expect_machine();
+        assert_eq!(*lp.ctx(), Context {
+            progressive: true,
+            requests: 1,
+            headers_received: 1,
+            responses_received: 1,
+            chunks_received: 1,
             bytes_received: 23,
             errors: 0,
         });
