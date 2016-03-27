@@ -1,4 +1,7 @@
+use std::io;
+
 use httparse;
+use rotor_stream;
 
 
 quick_error!{
@@ -18,6 +21,49 @@ quick_error!{
         InvalidChunkSize(e: httparse::InvalidChunkSize) {
             from()
             description("error parsing chunk size")
+        }
+        Connection(err: ProtocolError) {
+            from()
+            description("connection error")
+            display("connection error: {}", err)
+        }
+    }
+}
+
+quick_error!{
+    /// Error
+    #[derive(Debug)]
+    pub enum ProtocolError {
+        /// Error when connecting
+        ConnectionError(err: io::Error) {
+            description("connection error")
+            display("connection error: {}", err)
+        }
+        /// Error on idle connection
+        ConnectionClosed {
+            description("connection closed")
+            display("connection closed")
+        }
+        ReadError(err: io::Error) {
+            description("error when reading from stream")
+            display("read error: {}", err)
+        }
+        WriteError(err: io::Error) {
+            description("error when writing to stream")
+            display("write error: {}", err)
+        }
+    }
+}
+
+impl From<rotor_stream::Exception> for ProtocolError {
+    fn from(e: rotor_stream::Exception) -> ProtocolError {
+        use rotor_stream::Exception as S;
+        use self::ProtocolError as D;
+        match e {
+            S::EndOfStream => D::ConnectionClosed,
+            S::LimitReached => unreachable!(),
+            S::ReadError(e) => D::ReadError(e),
+            S::WriteError(e) => D::WriteError(e),
         }
     }
 }

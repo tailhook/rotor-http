@@ -3,7 +3,7 @@ use std::time::Duration;
 use rotor::{Scope, Time};
 
 use recvmode::RecvMode;
-use super::{Head, Request, ResponseError};
+use super::{Head, Request, ResponseError, ProtocolError};
 use super::{Connection};
 
 pub enum Task<M: Client> {
@@ -31,6 +31,11 @@ pub trait Client: Sized {
         connection: &Connection,
         scope: &mut Scope<<Self::Requester as Requester>::Context>)
         -> Task<Self>;
+
+    /// Error when establishing connection or connection closed when in idle
+    fn connection_error(self,
+        reason: &ProtocolError,
+        scope: &mut Scope<<Self::Requester as Requester>::Context>);
 
     /// Standard rotor's wakeup handler
     ///

@@ -4,7 +4,7 @@ use std::cmp::min;
 use std::fmt;
 
 use rotor::{Scope, Time};
-use rotor_stream::{Protocol, StreamSocket};
+use rotor_stream::{Protocol, StreamSocket, Exception};
 use rotor_stream::{Intent, Expectation as E, Transport};
 use rotor_stream::Buf;
 use httparse;
@@ -508,6 +508,27 @@ impl<M, S> Protocol for Parser<M, S>
             }
         }
     }
+    fn exception(self, _transport: &mut Transport<Self::Socket>,
+        reason: Exception, scope: &mut Scope<Self::Context>)
+        -> Intent<Self>
+    {
+        use self::ParserImpl::*;
+        let mut reason = reason.into();
+        match self.1 {
+            ReadHeaders { machine, .. } | Response { machine, .. } => {
+                let err = ResponseError::Connection(reason);
+                machine.bad_response(&err, scope);
+                reason = if let ResponseError::Connection(r) = err {
+                    r
+                } else {
+                    unreachable!();
+                }
+            }
+            _ => {}
+        }
+        self.0.connection_error(&reason, scope);
+        Intent::done()
+    }
     fn timeout(self, transport: &mut Transport<Self::Socket>,
         scope: &mut Scope<Self::Context>)
         -> Intent<Self>
@@ -556,7 +577,7 @@ mod test {
     use rotor::{Scope, EventSet, Time, Machine};
     use rotor_test::{MemIo, MockLoop};
     use client::{Client, Requester, Connection, Task, Request, Version};
-    use client::{Head, RecvMode, Fsm, ResponseError};
+    use client::{Head, RecvMode, Fsm, ResponseError, ProtocolError};
 
     #[derive(Debug, Default, PartialEq, Eq)]
     struct Context {
@@ -593,6 +614,11 @@ mod test {
             } else {
                 Task::Sleep(self, scope.now() + Duration::new(100, 0))
             }
+        }
+        fn connection_error(self, _err: &ProtocolError,
+            scope: &mut Scope<Context>)
+        {
+            scope.errors += 1;
         }
         fn wakeup(self,
             _connection: &Connection,

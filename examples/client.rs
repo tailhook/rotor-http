@@ -17,6 +17,7 @@ use argparse::{ArgumentParser, Store};
 use rotor::{Scope, Time};
 use rotor_http::client::{connect_tcp, Request, Head, Client, RecvMode};
 use rotor_http::client::{Connection, Requester, Task, Version, ResponseError};
+use rotor_http::client::{ProtocolError};
 
 struct Context;
 
@@ -43,6 +44,12 @@ impl Client for Cli {
                 Task::Close
             }
         }
+    }
+    fn connection_error(self, err: &ProtocolError,
+        _scope: &mut Scope<Context>)
+    {
+        writeln!(&mut stderr(), "----- Bad response: {} -----", err).ok();
+        exit(1);
     }
     fn wakeup(self,
         _connection: &Connection,
