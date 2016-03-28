@@ -1,7 +1,7 @@
 [package]
 name = "rotor-http"
 description = """
-    The mio-based http server (+with http client and websockets planned)
+    The mio-based http server and client (+ websockets planned)
 """
 license = "MIT"
 readme = "README.rst"
