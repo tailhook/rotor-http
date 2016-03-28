@@ -7,6 +7,7 @@ extern crate rotor_stream;
 #[cfg(test)] extern crate rotor_test;
 #[macro_use] extern crate quick_error;
 #[macro_use] extern crate matches;
+#[macro_use] extern crate log;
 
 pub mod server;
 pub mod client;

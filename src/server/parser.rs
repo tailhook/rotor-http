@@ -2,6 +2,7 @@ use std::any::Any;
 use std::cmp::min;
 use std::marker::PhantomData;
 use std::str::from_utf8;
+use std::error::Error;
 
 use httparse::{EMPTY_HEADER, Request, parse_chunk_size};
 use rotor::{Scope, Time};
@@ -609,7 +610,16 @@ impl<M: Server, S: StreamSocket> Protocol for Parser<M, S> {
             }
             _ => (),
         }
+        info!("Error handing connection: {}", reason);
         Intent::done()
+    }
+    fn fatal(self,
+        reason: Exception,
+        _scope: &mut Scope<Self::Context>)
+        -> Option<Box<Error>>
+    {
+        info!("Error handing connection: {}", reason);
+        None
     }
 }
 

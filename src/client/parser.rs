@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::str::from_utf8;
 use std::cmp::min;
 use std::fmt;
+use std::error::Error;
 
 use rotor::{Scope, Time};
 use rotor_stream::{Protocol, StreamSocket, Exception};
@@ -528,6 +529,13 @@ impl<M, S> Protocol for Parser<M, S>
         }
         self.0.connection_error(&reason, scope);
         Intent::done()
+    }
+    fn fatal(self, reason: Exception, scope: &mut Scope<Self::Context>)
+        -> Option<Box<Error>>
+    {
+        let reason = reason.into();
+        self.0.connection_error(&reason, scope);
+        None
     }
     fn timeout(self, transport: &mut Transport<Self::Socket>,
         scope: &mut Scope<Self::Context>)

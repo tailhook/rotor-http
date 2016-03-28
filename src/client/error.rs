@@ -35,7 +35,7 @@ quick_error!{
     #[derive(Debug)]
     pub enum ProtocolError {
         /// Error when connecting
-        ConnectionError(err: io::Error) {
+        ConnectError(err: io::Error) {
             description("connection error")
             display("connection error: {}", err)
         }
@@ -64,6 +64,7 @@ impl From<rotor_stream::Exception> for ProtocolError {
             S::LimitReached => unreachable!(),
             S::ReadError(e) => D::ReadError(e),
             S::WriteError(e) => D::WriteError(e),
+            S::ConnectError(e) => D::ConnectError(e),
         }
     }
 }
