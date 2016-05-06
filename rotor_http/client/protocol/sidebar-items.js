@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Task",""]],"trait":[["Client","A state machine that allows to initiate a client-side HTTP request"],["Requester","A handler of a single client-side HTTP"]]});

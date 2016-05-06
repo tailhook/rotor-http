@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Transport` struct in crate `rotor_stream`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Transport">
+
+    <title>rotor_stream::Transport - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>rotor_stream</a></p><script>window.sidebarCurrent = {name: 'Transport', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='index.html'>rotor_stream</a>::<wbr><a class='struct' href=''>Transport</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-705' class='srclink' href='../src/rotor_stream/lib.rs.html#69-73' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Transport&lt;'a, S: <a class='trait' href='../rotor_stream/trait.StreamSocket.html' title='rotor_stream::StreamSocket'>StreamSocket</a>&gt; {
+    // some fields omitted
+}</pre><div class='docblock'><p>Transport is thing that provides buffered I/O for stream sockets</p>
+
+<p>This is usually passed in all the <code>Protocol</code> handler methods. But in
+case you manipulate the transport by some external methods (like the
+one stored in <code>Arc&lt;Mutex&lt;Stream&gt;&gt;</code> you may wish to use <code>Stream::transport</code>
+or <code>Persistent::transport</code> methods to manipulate tranpsport. Just remember
+to <strong>wake up</strong> the state machine after manipulating buffers of transport.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl&lt;'a, S: <a class='trait' href='../rotor_stream/trait.StreamSocket.html' title='rotor_stream::StreamSocket'>StreamSocket</a>&gt; <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;'a, S&gt;</code></h3><div class='impl-items'><h4 id='method.socket' class='method'><code>fn <a href='#method.socket' class='fnname'>socket</a>&lt;'x&gt;(&amp;'x mut self) -&gt; &amp;'x mut S</code></h4>
+<div class='docblock'><p>Get the reference to the underlying stream</p>
+
+<p>It&#39;s here so you can inspect socket state or tune it. For example you
+might want to set TCP_CORK option or find out peer or local address.</p>
+
+<p>Reading from and writing to a socket directly may lead to unexpected
+behavior. Use <code>input()</code> and <code>output()</code> buffers instead.</p>
+</div><h4 id='method.input' class='method'><code>fn <a href='#method.input' class='fnname'>input</a>&lt;'x&gt;(&amp;'x mut self) -&gt; &amp;'x mut <a class='struct' href='../rotor_stream/struct.Buf.html' title='rotor_stream::Buf'>Buf</a></code></h4>
+<div class='docblock'><p>Get a reference to the input buffer</p>
+
+<p>It&#39;s expected that you only read and <code>consume()</code> bytes from buffer
+but never write.</p>
+</div><h4 id='method.output' class='method'><code>fn <a href='#method.output' class='fnname'>output</a>&lt;'x&gt;(&amp;'x mut self) -&gt; &amp;'x mut <a class='struct' href='../rotor_stream/struct.Buf.html' title='rotor_stream::Buf'>Buf</a></code></h4>
+<div class='docblock'><p>Get a reference to the output buffer</p>
+
+<p>It&#39;s expected that you only inspect and write to the output buffer
+but never <code>consume()</code></p>
+</div><h4 id='method.buffers' class='method'><code>fn <a href='#method.buffers' class='fnname'>buffers</a>&lt;'x&gt;(&amp;'x mut self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>&amp;'x mut <a class='struct' href='../rotor_stream/struct.Buf.html' title='rotor_stream::Buf'>Buf</a>, &amp;'x mut <a class='struct' href='../rotor_stream/struct.Buf.html' title='rotor_stream::Buf'>Buf</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a></code></h4>
+<div class='docblock'><p>Get a references to both buffers (input, output)</p>
+
+<p>It&#39;s useful when you want to pass both things somewhere along the
+chain of calls. See <code>input()</code> and <code>output()</code> methods for more comments
+on buffer usage</p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "rotor_stream";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

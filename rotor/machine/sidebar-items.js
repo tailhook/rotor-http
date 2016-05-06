@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["Machine","A trait that every state machine in the loop must implement"]]});

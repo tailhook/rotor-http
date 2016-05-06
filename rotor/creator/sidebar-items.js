@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["LoopCreator","An object that is used to construct a loop"],["LoopInstance","Second stage of loop creation"]]});

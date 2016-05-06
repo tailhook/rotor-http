@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Exception","An exception value that is received in `Protocol::exception` method"],["Expectation","This is an enumeration used to declare what next protocol is expecting"]],"trait":[["Protocol",""]]});

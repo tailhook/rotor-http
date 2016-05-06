@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `client` mod in crate `rotor_http`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, client">
+
+    <title>rotor_http::client - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>rotor_http</a></p><script>window.sidebarCurrent = {name: 'client', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>rotor_http</a>::<wbr><a class='mod' href=''>client</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-793' class='srclink' href='../../src/rotor_http/src/client/mod.rs.html#1-75' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>HTTP Client implementation</p>
+
+<p>Currently we aim to provide only HTTP/1.x implementation. We want to
+provide HTTP/2.0 and TLS implementation with exactly the same protocol.
+But it&#39;s yet unproven if it is possible.</p>
+
+<p>Also DNS resolving is not implemented yet.</p>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Connection.html'
+                               title='rotor_http::client::Connection'>Connection</a></td>
+                        <td class='docblock short'>
+                             <p>Structure that describes current connection state</p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Head.html'
+                               title='rotor_http::client::Head'>Head</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Request.html'
+                               title='rotor_http::client::Request'>Request</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.ProtocolError.html'
+                               title='rotor_http::client::ProtocolError'>ProtocolError</a></td>
+                        <td class='docblock short'>
+                             <p>Error</p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.RecvMode.html'
+                               title='rotor_http::client::RecvMode'>RecvMode</a></td>
+                        <td class='docblock short'>
+                             <p>This type is returned from <code>headers_received</code> handler of either
+client client or server protocol handler</p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.ResponseError.html'
+                               title='rotor_http::client::ResponseError'>ResponseError</a></td>
+                        <td class='docblock short'>
+                             <p>Error type which is passed to bad_response</p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.Task.html'
+                               title='rotor_http::client::Task'>Task</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.Version.html'
+                               title='rotor_http::client::Version'>Version</a></td>
+                        <td class='docblock short'>
+                             <p>Represents a version of the HTTP spec.</p>
+                        </td>
+                    </tr>
+                </table><h2 id='constants' class='section-header'><a href="#constants">Constants</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='constant' href='constant.MAX_CHUNK_HEAD.html'
+                               title='rotor_http::client::MAX_CHUNK_HEAD'>MAX_CHUNK_HEAD</a></td>
+                        <td class='docblock short'>
+                             <p>Maximum length of chunk size line. it would be okay with 12 bytes, but in
+theory there might be some extensions which we probably should skip</p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='constant' href='constant.MAX_HEADERS_NUM.html'
+                               title='rotor_http::client::MAX_HEADERS_NUM'>MAX_HEADERS_NUM</a></td>
+                        <td class='docblock short'>
+                             <p>Note httparse requires we preallocate array of this size so be wise</p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='constant' href='constant.MAX_HEADERS_SIZE.html'
+                               title='rotor_http::client::MAX_HEADERS_SIZE'>MAX_HEADERS_SIZE</a></td>
+                        <td class='docblock short'>
+                             <p>This one is not preallocated, but too large buffer is of limited use
+because of previous parameter.</p>
+                        </td>
+                    </tr>
+                </table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='trait' href='trait.Client.html'
+                               title='rotor_http::client::Client'>Client</a></td>
+                        <td class='docblock short'>
+                             <p>A state machine that allows to initiate a client-side HTTP request</p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='trait' href='trait.Requester.html'
+                               title='rotor_http::client::Requester'>Requester</a></td>
+                        <td class='docblock short'>
+                             <p>A handler of a single client-side HTTP</p>
+                        </td>
+                    </tr>
+                </table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.connect_tcp.html'
+                               title='rotor_http::client::connect_tcp'>connect_tcp</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='type' href='type.Fsm.html'
+                               title='rotor_http::client::Fsm'>Fsm</a></td>
+                        <td class='docblock short'>
+                             <p>A state machine for ad-hoc requests</p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='type' href='type.Persistent.html'
+                               title='rotor_http::client::Persistent'>Persistent</a></td>
+                        <td class='docblock short'>
+                             <p>A state machine for persistent connections</p>
+                        </td>
+                    </tr>
+                </table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "rotor_http";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

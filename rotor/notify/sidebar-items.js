@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["WakeupError","Error when waking up a connection"]],"struct":[["Notifier","The object used to wakeup unrelated state machine"]]});

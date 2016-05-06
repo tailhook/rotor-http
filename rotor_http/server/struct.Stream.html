@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Stream` struct in crate `rotor_http`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Stream">
+
+    <title>rotor_http::server::Stream - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>rotor_http</a>::<wbr><a href='index.html'>server</a></p><script>window.sidebarCurrent = {name: 'Stream', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>rotor_http</a>::<wbr><a href='index.html'>server</a>::<wbr><a class='struct' href=''>Stream</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-719' class='srclink' href='../../rotor_stream/struct.Stream.html?gotosrc=719' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Stream&lt;P&gt; <span class='where'>where P: <a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Protocol</a></span> {
+    // some fields omitted
+}</pre><div class='docblock'><p>A main stream state machine abstaction</p>
+
+<p>You may use the <code>Stream</code> directly. But it&#39;s recommented to either use
+<code>Persistent</code> for client connections or <code>Accept</code> for server-side
+connection processing.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl&lt;P&gt; <a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt; <span class='where'>where P: <a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Protocol</a></span></code></h3><div class='impl-items'><h4 id='method.transport' class='method'><code>fn <a href='#method.transport' class='fnname'>transport</a>(&amp;mut self) -&gt; <a class='struct' href='../../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Socket</a>&gt;</code></h4>
+<div class='docblock'><p>Get a <code>Transport</code> object for the stream</p>
+
+<p>This method is only useful  if you want to manipulate buffers
+externally (like pushing to the buffer from another thread). Just be
+sure to <strong>wake up</strong> state machine after manipulating buffers.</p>
+</div><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>(sock: P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Socket</a>, seed: P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Seed</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;, <a class='enum' href='../../void/enum.Void.html' title='void::Void'>Void</a>&gt;</code></h4>
+<h4 id='method.connected' class='method'><code>fn <a href='#method.connected' class='fnname'>connected</a>(sock: P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Socket</a>, seed: P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Seed</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;, <a class='enum' href='../../void/enum.Void.html' title='void::Void'>Void</a>&gt;</code></h4>
+</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><code>impl&lt;P&gt; <a class='trait' href='../../rotor_stream/accept/trait.Accepted.html' title='rotor_stream::accept::Accepted'>Accepted</a> for <a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt; <span class='where'>where P: <a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Protocol</a>, P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Seed</a>: <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a></span></code></h3><div class='impl-items'><h4 id='associatedtype.Seed' class='type'><code>type Seed = P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Seed</a></code></h4>
+<h4 id='associatedtype.Socket' class='type'><code>type Socket = P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Socket</a></code></h4>
+<h4 id='method.accepted' class='method'><code>fn <a href='../../rotor_stream/accept/trait.Accepted.html#method.accepted' class='fnname'>accepted</a>(sock: P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Socket</a>, seed: P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Seed</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;, <a class='enum' href='../../void/enum.Void.html' title='void::Void'>Void</a>&gt;</code></h4>
+</div><h3 class='impl'><code>impl&lt;P&gt; <a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Machine</a> for <a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt; <span class='where'>where P: <a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Protocol</a></span></code></h3><div class='impl-items'><h4 id='associatedtype.Context' class='type'><code>type Context = P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Context</a></code></h4>
+<h4 id='associatedtype.Seed-1' class='type'><code>type Seed = <a class='enum' href='../../void/enum.Void.html' title='void::Void'>Void</a></code></h4>
+<h4 id='method.create' class='method'><code>fn <a href='../../rotor/machine/trait.Machine.html#method.create' class='fnname'>create</a>(void: <a class='enum' href='../../void/enum.Void.html' title='void::Void'>Void</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;, <a class='enum' href='../../void/enum.Void.html' title='void::Void'>Void</a>&gt;</code></h4>
+<h4 id='method.ready' class='method'><code>fn <a href='../../rotor/machine/trait.Machine.html#method.ready' class='fnname'>ready</a>(self, events: <a class='struct' href='../../mio/event/struct.EventSet.html' title='mio::event::EventSet'>EventSet</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;, <a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Seed</a>&gt;</code></h4>
+<h4 id='method.spawned' class='method'><code>fn <a href='../../rotor/machine/trait.Machine.html#method.spawned' class='fnname'>spawned</a>(self, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;, <a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Seed</a>&gt;</code></h4>
+<h4 id='method.timeout' class='method'><code>fn <a href='../../rotor/machine/trait.Machine.html#method.timeout' class='fnname'>timeout</a>(self, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;, <a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Seed</a>&gt;</code></h4>
+<h4 id='method.wakeup' class='method'><code>fn <a href='../../rotor/machine/trait.Machine.html#method.wakeup' class='fnname'>wakeup</a>(self, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;<a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;, <a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt;::<a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Seed</a>&gt;</code></h4>
+</div><h3 id='derived_implementations'>Derived Implementations </h3><h3 class='impl'><code>impl&lt;P&gt; <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='struct' href='../../rotor_http/server/struct.Stream.html' title='rotor_http::server::Stream'>Stream</a>&lt;P&gt; <span class='where'>where P: <a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Protocol</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a>, P::<a class='trait' href='../../rotor_stream/protocol/trait.Protocol.html' title='rotor_stream::protocol::Protocol'>Socket</a>: <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a></span></code></h3><div class='impl-items'><h4 id='method.fmt' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#method.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Error.html' title='core::fmt::Error'>Error</a>&gt;</code></h4>
+</div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "rotor_http";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

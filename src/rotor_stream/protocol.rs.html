@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="Source to the Rust file `/home/travis/.cargo/registry/src/github.com-88ac128001ac3a9a/rotor-stream-0.6.2/src/protocol.rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang">
+
+    <title>protocol.rs.html -- source</title>
+
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content source"><pre class="line-numbers"><span id="1">  1</span>
+<span id="2">  2</span>
+<span id="3">  3</span>
+<span id="4">  4</span>
+<span id="5">  5</span>
+<span id="6">  6</span>
+<span id="7">  7</span>
+<span id="8">  8</span>
+<span id="9">  9</span>
+<span id="10"> 10</span>
+<span id="11"> 11</span>
+<span id="12"> 12</span>
+<span id="13"> 13</span>
+<span id="14"> 14</span>
+<span id="15"> 15</span>
+<span id="16"> 16</span>
+<span id="17"> 17</span>
+<span id="18"> 18</span>
+<span id="19"> 19</span>
+<span id="20"> 20</span>
+<span id="21"> 21</span>
+<span id="22"> 22</span>
+<span id="23"> 23</span>
+<span id="24"> 24</span>
+<span id="25"> 25</span>
+<span id="26"> 26</span>
+<span id="27"> 27</span>
+<span id="28"> 28</span>
+<span id="29"> 29</span>
+<span id="30"> 30</span>
+<span id="31"> 31</span>
+<span id="32"> 32</span>
+<span id="33"> 33</span>
+<span id="34"> 34</span>
+<span id="35"> 35</span>
+<span id="36"> 36</span>
+<span id="37"> 37</span>
+<span id="38"> 38</span>
+<span id="39"> 39</span>
+<span id="40"> 40</span>
+<span id="41"> 41</span>
+<span id="42"> 42</span>
+<span id="43"> 43</span>
+<span id="44"> 44</span>
+<span id="45"> 45</span>
+<span id="46"> 46</span>
+<span id="47"> 47</span>
+<span id="48"> 48</span>
+<span id="49"> 49</span>
+<span id="50"> 50</span>
+<span id="51"> 51</span>
+<span id="52"> 52</span>
+<span id="53"> 53</span>
+<span id="54"> 54</span>
+<span id="55"> 55</span>
+<span id="56"> 56</span>
+<span id="57"> 57</span>
+<span id="58"> 58</span>
+<span id="59"> 59</span>
+<span id="60"> 60</span>
+<span id="61"> 61</span>
+<span id="62"> 62</span>
+<span id="63"> 63</span>
+<span id="64"> 64</span>
+<span id="65"> 65</span>
+<span id="66"> 66</span>
+<span id="67"> 67</span>
+<span id="68"> 68</span>
+<span id="69"> 69</span>
+<span id="70"> 70</span>
+<span id="71"> 71</span>
+<span id="72"> 72</span>
+<span id="73"> 73</span>
+<span id="74"> 74</span>
+<span id="75"> 75</span>
+<span id="76"> 76</span>
+<span id="77"> 77</span>
+<span id="78"> 78</span>
+<span id="79"> 79</span>
+<span id="80"> 80</span>
+<span id="81"> 81</span>
+<span id="82"> 82</span>
+<span id="83"> 83</span>
+<span id="84"> 84</span>
+<span id="85"> 85</span>
+<span id="86"> 86</span>
+<span id="87"> 87</span>
+<span id="88"> 88</span>
+<span id="89"> 89</span>
+<span id="90"> 90</span>
+<span id="91"> 91</span>
+<span id="92"> 92</span>
+<span id="93"> 93</span>
+<span id="94"> 94</span>
+<span id="95"> 95</span>
+<span id="96"> 96</span>
+<span id="97"> 97</span>
+<span id="98"> 98</span>
+<span id="99"> 99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+</pre><pre class='rust '>
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>error</span>::<span class='ident'>Error</span>;
+<span class='kw'>use</span> <span class='ident'>rotor</span>::<span class='ident'>Scope</span>;
+
+<span class='kw'>use</span> {<span class='ident'>Transport</span>, <span class='ident'>Intent</span>, <span class='ident'>StreamSocket</span>};
+
+<span class='macro'>quick_error</span><span class='macro'>!</span>{
+    <span class='doccomment'>/// An exception value that is received in `Protocol::exception` method</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// This thing is usually used for nice error detection. But sometimes it</span>
+    <span class='doccomment'>/// is also useful for valid protocol processing. For example it allows</span>
+    <span class='doccomment'>/// to detect end-of-stream-delimited prootols (of those which make of</span>
+    <span class='doccomment'>/// use of TCP half close)</span>
+    <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>)]</span>
+    <span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>Exception</span> {
+        <span class='doccomment'>/// End of stream reached (when reading)</span>
+        <span class='doccomment'>///</span>
+        <span class='doccomment'>/// This may be not a broken expectation, we just notify of end of</span>
+        <span class='doccomment'>/// stream always (if the state machine is still alive)</span>
+        <span class='doccomment'>///</span>
+        <span class='doccomment'>/// Note: the equivalent of end of stream for write system call is</span>
+        <span class='doccomment'>/// translated to `WriteError(WriteZero)`</span>
+        <span class='ident'>EndOfStream</span> {
+            <span class='ident'>description</span>(<span class='string'>&quot;end of stream reached&quot;</span>)
+        }
+        <span class='doccomment'>/// Limit for the number of bytes reached</span>
+        <span class='doccomment'>///</span>
+        <span class='doccomment'>/// This is called when there is alredy maximum bytes in the buffer</span>
+        <span class='doccomment'>/// (third argument of `Delimiter`) but no delimiter found.</span>
+        <span class='ident'>LimitReached</span> {
+            <span class='ident'>description</span>(<span class='string'>&quot;reached the limit of bytes buffered&quot;</span>)
+        }
+        <span class='ident'>ReadError</span>(<span class='ident'>err</span>: <span class='ident'>io</span>::<span class='ident'>Error</span>) {
+            <span class='ident'>description</span>(<span class='string'>&quot;error when reading from stream&quot;</span>)
+            <span class='ident'>display</span>(<span class='string'>&quot;read error: {}&quot;</span>, <span class='ident'>err</span>)
+        }
+        <span class='ident'>WriteError</span>(<span class='ident'>err</span>: <span class='ident'>io</span>::<span class='ident'>Error</span>) {
+            <span class='ident'>description</span>(<span class='string'>&quot;error when writing to stream&quot;</span>)
+            <span class='ident'>display</span>(<span class='string'>&quot;write error: {}&quot;</span>, <span class='ident'>err</span>)
+        }
+        <span class='ident'>ConnectError</span>(<span class='ident'>err</span>: <span class='ident'>io</span>::<span class='ident'>Error</span>) {
+            <span class='ident'>description</span>(<span class='string'>&quot;error when connecting to an address&quot;</span>)
+            <span class='ident'>display</span>(<span class='string'>&quot;connection error: {}&quot;</span>, <span class='ident'>err</span>)
+        }
+    }
+}
+
+
+<span class='doccomment'>/// This is an enumeration used to declare what next protocol is expecting</span>
+<span class='doccomment'>///</span>
+<span class='doccomment'>/// The value is used in `Intent::expect()`.</span>
+<span class='doccomment'>///</span>
+<span class='doccomment'>/// Most users should use `IntentBuilder`&#39;s (a type which is returned from</span>
+<span class='doccomment'>/// `Intent::of(..)`) methods. But for some kinds of control flow being</span>
+<span class='doccomment'>/// able to specify expectation as a separate enum is very useful.</span>
+<span class='comment'>// #[derive(Clone, Clone)]</span>
+<span class='comment'>// This could be Copy, but I think it could be implemented efficient enough</span>
+<span class='comment'>// without Copy and Clone. Probably we will enable them for the user code later</span>
+<span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>)]</span>
+<span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>Expectation</span> {
+    <span class='doccomment'>/// Read number of bytes</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// The buffer that is passed to bytes_read might contain more bytes, but</span>
+    <span class='doccomment'>/// `num` parameter of the `bytes_read()` method will contain a number of</span>
+    <span class='doccomment'>/// bytes passed into `Bytes` constructor.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Note that bytes passed here is neither limit on bytes actually read</span>
+    <span class='doccomment'>/// from the network (we resize buffer as convenient for memory allocator</span>
+    <span class='doccomment'>/// and read as much as possible), nor is the preallocated buffer size</span>
+    <span class='doccomment'>/// (we don&#39;t preallocate the buffer to be less vulnerable to DoS attacks).</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Note that real number of bytes that `netbuf::Buf` might contain is less</span>
+    <span class='doccomment'>/// than 4Gb. So this value can&#39;t be as big as `usize::MAX`</span>
+    <span class='ident'>Bytes</span>(<span class='ident'>usize</span>),
+    <span class='doccomment'>/// Read until delimiter</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Parameters: `offset`, `delimiter`, `max_bytes`</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Only static strings are supported for delimiter now.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// `bytes_read` action gets passed `num` bytes before the delimeter, or</span>
+    <span class='doccomment'>/// in other words, the position of the delimiter in the buffer.</span>
+    <span class='doccomment'>/// The delimiter is guaranteed to be in the buffer too. The `max_bytes`</span>
+    <span class='doccomment'>/// do include the offset itself.</span>
+    <span class='doccomment'>///</span>
+    <span class='ident'>Delimiter</span>(<span class='ident'>usize</span>, <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>], <span class='ident'>usize</span>),
+    <span class='doccomment'>/// Wait until no more than N bytes is in output buffer</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// This is going to be used for several cases:</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// 1. `Flush(0)` before closing the connection</span>
+    <span class='doccomment'>/// 2. `Flush(0)` to before receiving new request (if needed)</span>
+    <span class='doccomment'>/// 3. `Flush(N)` to wait when you can continue producing some data, this</span>
+    <span class='doccomment'>///    allows TCP pushback. To be able not to put everything in output</span>
+    <span class='doccomment'>///    buffer at once. Still probably more efficient than `Flush(0)`</span>
+    <span class='ident'>Flush</span>(<span class='ident'>usize</span>),
+    <span class='doccomment'>/// Wait until deadline</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// This useful for two cases:</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// 1. Just wait before doing anything if required by business logic</span>
+    <span class='doccomment'>/// 2. Wait until `wakeup` happens or atimeout whatever comes first</span>
+    <span class='ident'>Sleep</span>,
+}
+
+<span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>Protocol</span>: <span class='ident'>Sized</span> {
+    <span class='kw'>type</span> <span class='ident'>Context</span>;
+    <span class='kw'>type</span> <span class='ident'>Socket</span>: <span class='ident'>StreamSocket</span>;
+    <span class='kw'>type</span> <span class='ident'>Seed</span>;
+    <span class='doccomment'>/// Starting the protocol (e.g. accepted a socket)</span>
+    <span class='comment'>// TODO(tailhook) transport be here instead of sock?</span>
+    <span class='kw'>fn</span> <span class='ident'>create</span>(<span class='ident'>seed</span>: <span class='ident'>Self</span>::<span class='ident'>Seed</span>, <span class='ident'>sock</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Self</span>::<span class='ident'>Socket</span>,
+        <span class='ident'>scope</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Scope</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Context</span><span class='op'>&gt;</span>)
+        <span class='op'>-&gt;</span> <span class='ident'>Intent</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span>;
+
+    <span class='doccomment'>/// The action WaitBytes or WaitDelimiter is complete</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Note you don&#39;t have to consume input buffer. The data is in the</span>
+    <span class='doccomment'>/// transport, but you are free to ignore it. This may be useful for</span>
+    <span class='doccomment'>/// example to yield `Bytes(4)` to read the header size and then yield</span>
+    <span class='doccomment'>/// bigger value to read the whole header at once. But be careful, if</span>
+    <span class='doccomment'>/// you don&#39;t consume bytes you will repeatedly receive them again.</span>
+    <span class='kw'>fn</span> <span class='ident'>bytes_read</span>(<span class='self'>self</span>, <span class='ident'>transport</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Transport</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Socket</span><span class='op'>&gt;</span>,
+                  <span class='ident'>end</span>: <span class='ident'>usize</span>, <span class='ident'>scope</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Scope</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Context</span><span class='op'>&gt;</span>)
+        <span class='op'>-&gt;</span> <span class='ident'>Intent</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span>;
+
+    <span class='doccomment'>/// The action Flush is complete</span>
+    <span class='kw'>fn</span> <span class='ident'>bytes_flushed</span>(<span class='self'>self</span>, <span class='ident'>transport</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Transport</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Socket</span><span class='op'>&gt;</span>,
+                     <span class='ident'>scope</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Scope</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Context</span><span class='op'>&gt;</span>)
+        <span class='op'>-&gt;</span> <span class='ident'>Intent</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span>;
+
+    <span class='doccomment'>/// Timeout happened, which means either deadline reached in</span>
+    <span class='doccomment'>/// Bytes, Delimiter, Flush. Or Sleep has passed.</span>
+    <span class='kw'>fn</span> <span class='ident'>timeout</span>(<span class='self'>self</span>, <span class='ident'>transport</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Transport</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Socket</span><span class='op'>&gt;</span>,
+        <span class='ident'>scope</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Scope</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Context</span><span class='op'>&gt;</span>)
+        <span class='op'>-&gt;</span> <span class='ident'>Intent</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span>;
+
+    <span class='doccomment'>/// The method is called when too much bytes are read but no delimiter</span>
+    <span class='doccomment'>/// is found within the number of bytes specified. Or end of stream reached</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// The usual case is to just close the connection (because it&#39;s probably</span>
+    <span class='doccomment'>/// DoS attack is going on or the protocol mismatch), but sometimes you</span>
+    <span class='doccomment'>/// want to send error code, like 413 Entity Too Large for HTTP.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Note it&#39;s your responsibility to wait for the buffer to be flushed.</span>
+    <span class='doccomment'>/// If you write to the buffer and then return Intent::done() immediately,</span>
+    <span class='doccomment'>/// your data will be silently discarded.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// The `WriteError` and `ConnectError` are never passed here but passed</span>
+    <span class='doccomment'>/// into `fatal` handler instead.</span>
+    <span class='kw'>fn</span> <span class='ident'>exception</span>(<span class='self'>self</span>, <span class='ident'>_transport</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Transport</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Socket</span><span class='op'>&gt;</span>,
+        <span class='ident'>reason</span>: <span class='ident'>Exception</span>, <span class='ident'>_scope</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Scope</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Context</span><span class='op'>&gt;</span>)
+        <span class='op'>-&gt;</span> <span class='ident'>Intent</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span>;
+
+    <span class='doccomment'>/// This method is called on fatal errors of the connection</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Connection can&#39;t proceed after this method is called</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Note: we use shared `Exception` type for both exception and fatal</span>
+    <span class='doccomment'>/// exceptions. This method receives ``WriteError`` and ``ConnectError``</span>
+    <span class='doccomment'>/// options only.</span>
+    <span class='kw'>fn</span> <span class='ident'>fatal</span>(<span class='self'>self</span>, <span class='ident'>reason</span>: <span class='ident'>Exception</span>, <span class='ident'>scope</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Scope</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Context</span><span class='op'>&gt;</span>)
+        <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>Error</span><span class='op'>&gt;&gt;</span>;
+
+    <span class='doccomment'>/// Message received (from the main loop)</span>
+    <span class='kw'>fn</span> <span class='ident'>wakeup</span>(<span class='self'>self</span>, <span class='ident'>transport</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Transport</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Socket</span><span class='op'>&gt;</span>,
+        <span class='ident'>scope</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Scope</span><span class='op'>&lt;</span><span class='ident'>Self</span>::<span class='ident'>Context</span><span class='op'>&gt;</span>)
+        <span class='op'>-&gt;</span> <span class='ident'>Intent</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span>;
+}
+</pre>
+</section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "rotor_stream";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

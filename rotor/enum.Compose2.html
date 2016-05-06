@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Compose2` enum in crate `rotor`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Compose2">
+
+    <title>rotor::Compose2 - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>rotor</a></p><script>window.sidebarCurrent = {name: 'Compose2', ty: 'enum', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content enum">
+<h1 class='fqn'><span class='in-band'>Enum <a href='index.html'>rotor</a>::<wbr><a class='enum' href=''>Compose2</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-554' class='srclink' href='../src/rotor/compose.rs.html#14-17' title='goto source code'>[src]</a></span></h1>
+<pre class='rust enum'>pub enum Compose2&lt;A: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a>, B: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a>&gt; {
+    A(A),
+    B(B),
+}</pre><div class='docblock'><p>Composes two state machines</p>
+
+<p>Used to &quot;mount&quot; two different application into single main loop, or to
+use multiple protocols simultaneously. Can be nested to any level.</p>
+
+<p>We will probably implement n &gt; 2 composition later, for effeciency
+reasons.</p>
+</div><h2 class='variants'>Variants</h2>
+<table class='variants_table'><tr><td id='variant.A'><code>A</code></td><td></td><td></td></tr><tr><td id='variant.B'><code>B</code></td><td></td><td></td></tr></table><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><code>impl&lt;X, AA, BB&gt; <a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Machine</a> for <a class='enum' href='../rotor/enum.Compose2.html' title='rotor::Compose2'>Compose2</a>&lt;AA, BB&gt; <span class='where'>where AA: <a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Machine</a>&lt;Context=X&gt;, BB: <a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Machine</a>&lt;Context=X&gt;</span></code></h3><div class='impl-items'><h4 id='associatedtype.Context' class='type'><code>type Context = X</code></h4>
+<h4 id='associatedtype.Seed' class='type'><code>type Seed = Compose2Seed&lt;AA::Seed, BB::Seed&gt;</code></h4>
+<h4 id='method.create' class='method'><code>fn <a href='../rotor/trait.Machine.html#method.create' class='fnname'>create</a>(seed: Self::<a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Seed</a>, scope: &amp;mut <a class='struct' href='../rotor/struct.Scope.html' title='rotor::Scope'>Scope</a>&lt;X&gt;) -&gt; <a class='struct' href='../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;Self, <a class='enum' href='../rotor/void/enum.Void.html' title='rotor::void::Void'>Void</a>&gt;</code></h4>
+<h4 id='method.ready' class='method'><code>fn <a href='../rotor/trait.Machine.html#method.ready' class='fnname'>ready</a>(self, events: <a class='struct' href='../rotor/mio/struct.EventSet.html' title='rotor::mio::EventSet'>EventSet</a>, scope: &amp;mut <a class='struct' href='../rotor/struct.Scope.html' title='rotor::Scope'>Scope</a>&lt;X&gt;) -&gt; <a class='struct' href='../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;Self, Self::<a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Seed</a>&gt;</code></h4>
+<h4 id='method.spawned' class='method'><code>fn <a href='../rotor/trait.Machine.html#method.spawned' class='fnname'>spawned</a>(self, scope: &amp;mut <a class='struct' href='../rotor/struct.Scope.html' title='rotor::Scope'>Scope</a>&lt;X&gt;) -&gt; <a class='struct' href='../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;Self, Self::<a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Seed</a>&gt;</code></h4>
+<h4 id='method.timeout' class='method'><code>fn <a href='../rotor/trait.Machine.html#method.timeout' class='fnname'>timeout</a>(self, scope: &amp;mut <a class='struct' href='../rotor/struct.Scope.html' title='rotor::Scope'>Scope</a>&lt;X&gt;) -&gt; <a class='struct' href='../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;Self, Self::<a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Seed</a>&gt;</code></h4>
+<h4 id='method.wakeup' class='method'><code>fn <a href='../rotor/trait.Machine.html#method.wakeup' class='fnname'>wakeup</a>(self, scope: &amp;mut <a class='struct' href='../rotor/struct.Scope.html' title='rotor::Scope'>Scope</a>&lt;X&gt;) -&gt; <a class='struct' href='../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;Self, Self::<a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Seed</a>&gt;</code></h4>
+<h4 id='method.spawn_error' class='method'><code>fn <a href='../rotor/trait.Machine.html#method.spawn_error' class='fnname'>spawn_error</a>(self, _scope: &amp;mut <a class='struct' href='../rotor/struct.Scope.html' title='rotor::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Context</a>&gt;, error: <a class='enum' href='../rotor/enum.SpawnError.html' title='rotor::SpawnError'>SpawnError</a>&lt;Self::<a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Seed</a>&gt;) -&gt; <a class='struct' href='../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;Self, Self::<a class='trait' href='../rotor/trait.Machine.html' title='rotor::Machine'>Seed</a>&gt;</code></h4>
+</div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "rotor";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

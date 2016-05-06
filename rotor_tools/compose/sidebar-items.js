@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Spawn","Composes two state machines where of the state machines spawns multiple instances of another one"]],"trait":[["Spawner",""]]});

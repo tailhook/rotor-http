@@ -1,0 +1,1 @@
+initSidebarItems({"constant":[["MAX_BUF_SIZE","Maximum size of buffer allowed. Note: we assert on this size. Most network servers should set their own limits to something much smaller."]],"enum":[["RangeArgument","Temporary type until the one in stdlib it made stable"]],"struct":[["Buf",""]]});

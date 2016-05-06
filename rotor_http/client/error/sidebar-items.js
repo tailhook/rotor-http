@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["ProtocolError","Error"],["ResponseError","Error type which is passed to bad_response"]]});

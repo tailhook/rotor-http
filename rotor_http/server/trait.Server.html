@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Server` trait in crate `rotor_http`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Server">
+
+    <title>rotor_http::server::Server - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>rotor_http</a>::<wbr><a href='index.html'>server</a></p><script>window.sidebarCurrent = {name: 'Server', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content trait">
+<h1 class='fqn'><span class='in-band'>Trait <a href='../index.html'>rotor_http</a>::<wbr><a href='index.html'>server</a>::<wbr><a class='trait' href=''>Server</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-481' class='srclink' href='../../src/rotor_http/src/server/protocol.rs.html#14-168' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Server: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a> {
+    type Context;
+    type Seed: <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a>;
+    fn <a href='#tymethod.headers_received' class='fnname'>headers_received</a>(seed: Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, head: <a class='struct' href='../../rotor_http/server/struct.Head.html' title='rotor_http::server::Head'>Head</a>, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>Self, <a class='enum' href='../../rotor_http/server/enum.RecvMode.html' title='rotor_http::server::RecvMode'>RecvMode</a>, <a class='struct' href='../../rotor/loop_time/struct.Time.html' title='rotor::loop_time::Time'>Time</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>&gt;;
+    fn <a href='#tymethod.request_received' class='fnname'>request_received</a>(self, data: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;;
+    fn <a href='#tymethod.request_chunk' class='fnname'>request_chunk</a>(self, chunk: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;;
+    fn <a href='#tymethod.request_end' class='fnname'>request_end</a>(self, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;;
+    fn <a href='#tymethod.timeout' class='fnname'>timeout</a>(self, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>Self, <a class='struct' href='../../rotor/loop_time/struct.Time.html' title='rotor::loop_time::Time'>Time</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>&gt;;
+    fn <a href='#tymethod.wakeup' class='fnname'>wakeup</a>(self, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;;
+
+    fn <a href='#method.bad_request' class='fnname'>bad_request</a>(self, _response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) { ... }
+    fn <a href='#method.emit_error_page' class='fnname'>emit_error_page</a>(code: &amp;<a class='trait' href='../../rotor_http/server/trait.HttpError.html' title='rotor_http::server::HttpError'>HttpError</a>, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, _seed: &amp;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) { ... }
+    fn <a href='#method.idle_timeout' class='fnname'>idle_timeout</a>(_seed: &amp;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a> { ... }
+    fn <a href='#method.header_byte_timeout' class='fnname'>header_byte_timeout</a>(_seed: &amp;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a> { ... }
+    fn <a href='#method.send_response_timeout' class='fnname'>send_response_timeout</a>(_seed: &amp;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a> { ... }
+}</pre><div class='docblock'><p>A handler of server-side HTTP</p>
+
+<p>Used for all versions of HTTP</p>
+</div>
+            <h2 id='associated-types'>Associated Types</h2>
+            <div class='methods'>
+        <h3 id='associatedtype.Context' class='method stab '><code>type Context</code></h3><h3 id='associatedtype.Seed' class='method stab '><code>type Seed: <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a></code></h3><div class='docblock'><p>Each request gets a clone of a Seed in <code>headers_received()</code> handler</p>
+</div></div>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.headers_received' class='method stab '><code>fn <a href='#tymethod.headers_received' class='fnname'>headers_received</a>(seed: Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, head: <a class='struct' href='../../rotor_http/server/struct.Head.html' title='rotor_http::server::Head'>Head</a>, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>Self, <a class='enum' href='../../rotor_http/server/enum.RecvMode.html' title='rotor_http::server::RecvMode'>RecvMode</a>, <a class='struct' href='../../rotor/loop_time/struct.Time.html' title='rotor::loop_time::Time'>Time</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>&gt;</code></h3><div class='docblock'><p>Encountered when headers received.</p>
+
+<p>Returns self, mode and timeout for reading whole request.</p>
+
+<p>This handler decides whether a request is fully buffered or whether
+we need to read request body by chunk. It&#39;s recommended to return
+Buffered up to certain size, or at least for zero-length requests.</p>
+
+<p>You may start building a response right here, or wait for
+the next event.</p>
+
+<p>In case there is Expect header, the successful (non-None) return of
+this handler means we should return a <code>100 Expect</code> result. But if you
+have started building response right here, we skip expect header, as
+normal response code is good enough for browser. (Are there ugly
+proxies that propagate 100 Expect but does buffer response headers?)</p>
+
+<p>Note that <code>head</code> is passed here once, and forgotten by the
+protocol. If you need it later it&#39;s your responsibility to store it
+somewhere.</p>
+</div><h3 id='tymethod.request_received' class='method stab '><code>fn <a href='#tymethod.request_received' class='fnname'>request_received</a>(self, data: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;</code></h3><div class='docblock'><p>Called when full request is received in buffered mode.</p>
+
+<p>Note that even if you return None from handler, the data already
+written in Response is used and rotor-http does as much as it can
+to produce a valid response.</p>
+</div><h3 id='tymethod.request_chunk' class='method stab '><code>fn <a href='#tymethod.request_chunk' class='fnname'>request_chunk</a>(self, chunk: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;</code></h3><div class='docblock'><p>Received chunk of data</p>
+
+<p>Whey you return <code>Progressive(nbytes)</code> from headers received, you
+may expect than chunk will be at least of <code>nbytes</code> of length. But
+you must not rely on that for few reasons:</p>
+
+<ol>
+<li>Last chunk of request body may be smaller</li>
+<li>Chunk is read up to some buffer size, which is heuristically
+determined, and is usually larger than <code>nbytes</code></li>
+<li>Currently for chunked encoding we don&#39;t merge chunks, so last
+part of each chunk may be shorter as <code>nbytes</code></li>
+</ol>
+</div><h3 id='tymethod.request_end' class='method stab '><code>fn <a href='#tymethod.request_end' class='fnname'>request_end</a>(self, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;</code></h3><div class='docblock'><p>End of request body, only for Progressive requests</p>
+</div><h3 id='tymethod.timeout' class='method stab '><code>fn <a href='#tymethod.timeout' class='fnname'>timeout</a>(self, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>Self, <a class='struct' href='../../rotor/loop_time/struct.Time.html' title='rotor::loop_time::Time'>Time</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>&gt;</code></h3><div class='docblock'><p>Request timeout occurred</p>
+
+<p>This is only called if headers are already received but state machine
+is not yet finished. It drops down in two cases:</p>
+
+<ol>
+<li>Receiving request</li>
+<li>Sending response</li>
+</ol>
+
+<p>If you received timeout you can return the new one, send error, or
+finish response whatever you like. If response is not started yet at
+the time method returns, client gets 408 error code.</p>
+
+<p>Unless you&#39;ve returned the new timeout connection will be closed after
+the event.</p>
+</div><h3 id='tymethod.wakeup' class='method stab '><code>fn <a href='#tymethod.wakeup' class='fnname'>wakeup</a>(self, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;</code></h3></div>
+            <h2 id='provided-methods'>Provided Methods</h2>
+            <div class='methods'>
+        <h3 id='method.bad_request' class='method stab '><code>fn <a href='#method.bad_request' class='fnname'>bad_request</a>(self, _response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;)</code></h3><div class='docblock'><p>Called when request become invalid between <code>request_start()</code>
+and <code>request_received/request_end</code></p>
+
+<p>You may put error page here if response is not <code>is_started()</code>. Or you
+can finish response in case you can send something meaningfull anyway.
+Otherwise, response will be filled with <code>BadRequest</code> from
+<code>emit_error_page</code> or connection closed immediately (if <code>is_started()</code>
+is true). You can&#39;t continue request processing after this handler is
+called.</p>
+
+<p>Currently it is called for two reasons:</p>
+
+<ol>
+<li>Invalid chunked encoding</li>
+<li>End of stream before number of bytes mentioned in Content-Length</li>
+</ol>
+
+<p>It&#39;s never called on a timeout.</p>
+</div><h3 id='method.emit_error_page' class='method stab '><code>fn <a href='#method.emit_error_page' class='fnname'>emit_error_page</a>(code: &amp;<a class='trait' href='../../rotor_http/server/trait.HttpError.html' title='rotor_http::server::HttpError'>HttpError</a>, response: &amp;mut <a class='struct' href='../../rotor_http/server/struct.Response.html' title='rotor_http::server::Response'>Response</a>, _seed: &amp;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;)</code></h3><div class='docblock'><p>A bad request occured</p>
+
+<p>You should send a complete response in this handler.</p>
+
+<p>This is a static method, since it often called when there is no
+instance of request at all. You may override a page for specific
+request in <code>bad_request()</code> handler, if request headers are already
+parsed. If <code>bad_request()</code> emits anything this method is not called.</p>
+
+<p>You may also use (parts of) <code>seed</code> value or a context to determine
+the correct error page.</p>
+
+<p>You can also fallback to a default handler for pages you don&#39;t want
+to render.</p>
+</div><h3 id='method.idle_timeout' class='method stab '><code>fn <a href='#method.idle_timeout' class='fnname'>idle_timeout</a>(_seed: &amp;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a></code></h3><div class='docblock'><p>A timeout for idle keep-alive connection</p>
+
+<p>Default is 120 seconds</p>
+</div><h3 id='method.header_byte_timeout' class='method stab '><code>fn <a href='#method.header_byte_timeout' class='fnname'>header_byte_timeout</a>(_seed: &amp;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a></code></h3><div class='docblock'><p>A timeout for receiving at least one byte from headers</p>
+
+<p>Default is 45 seconds</p>
+</div><h3 id='method.send_response_timeout' class='method stab '><code>fn <a href='#method.send_response_timeout' class='fnname'>send_response_timeout</a>(_seed: &amp;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Seed</a>, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_http/server/trait.Server.html' title='rotor_http::server::Server'>Context</a>&gt;) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a></code></h3><div class='docblock'><p>A timeout for sending full response body to the (slow) client</p>
+
+<p>Default is 3600 seconds (one hour)</p>
+</div></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    </ul><script type="text/javascript" async
+                              src="../../implementors/rotor_http/server/trait.Server.js">
+                      </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "rotor_http";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

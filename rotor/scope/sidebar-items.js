@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["EarlyScope","This is a structure that works similarly to Scope, but doesn't have a context"],["Scope","The structure passed to every action handler"]],"trait":[["GenericScope","A common part of `Scope` and `EarlyScope`"]]});

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Replaceable` trait in crate `rotor_tools`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Replaceable">
+
+    <title>rotor_tools::sync::Replaceable - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>rotor_tools</a>::<wbr><a href='index.html'>sync</a></p><script>window.sidebarCurrent = {name: 'Replaceable', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content trait">
+<h1 class='fqn'><span class='in-band'>Trait <a href='../index.html'>rotor_tools</a>::<wbr><a href='index.html'>sync</a>::<wbr><a class='trait' href=''>Replaceable</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-101' class='srclink' href='../../src/rotor_tools/sync.rs.html#27-62' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Replaceable: <a class='trait' href='../../rotor/machine/trait.Machine.html' title='rotor::machine::Machine'>Machine</a> {
+    fn <a href='#tymethod.empty' class='fnname'>empty</a>(&amp;self) -&gt; Self;
+
+    fn <a href='#method.restart' class='fnname'>restart</a>(self, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_tools/sync/trait.Replaceable.html' title='rotor_tools::sync::Replaceable'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;Self, Self::<a class='trait' href='../../rotor_tools/sync/trait.Replaceable.html' title='rotor_tools::sync::Replaceable'>Seed</a>&gt; { ... }
+}</pre><div class='docblock'><p>A trait which allows to replace the state machine with dummy/null/None</p>
+
+<p>Since we put machine (used with <code>Mutexed</code>) into a <code>Arc&lt;Mutex&lt;M&gt;&gt;</code> we need
+to replace it with some other value while the real value is moved off the
+state machine to be able to replace it by code, having self by-value.</p>
+
+<p>When the thread working with the state machine panics while machine is
+moved off the place, the poisoned lock is left with <code>Replaceable::empty</code>
+value. When lock is poisoned we unwrap the value and use it as a valid
+state machine. So you can continue to work after panic with the clean
+state after a crash (perhaps if the panic was in different thread).</p>
+
+<p>The text above means you should be able to &quot;restart&quot; the state machine
+from the <code>empty()</code> state.</p>
+</div>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.empty' class='method stab '><code>fn <a href='#tymethod.empty' class='fnname'>empty</a>(&amp;self) -&gt; Self</code></h3><div class='docblock'><p>Return the empty value that may be used as replacement</p>
+
+<p><strong>The method must be cheap to compute</strong>. Because it&#39;s executed on
+every action of a state machine (for <code>mem::replace</code>)</p>
+
+<p>Note in case the lock is poisoned (panic was received while keeping
+state machine locked, perhaps in another thread), the <code>empty</code> value
+is used on the poisoned value, before <code>restart()</code> is called. This
+means you only want to use read-only parts of <code>self</code> here (better
+none at all, but that&#39;s not always possible).</p>
+</div></div>
+            <h2 id='provided-methods'>Provided Methods</h2>
+            <div class='methods'>
+        <h3 id='method.restart' class='method stab '><code>fn <a href='#method.restart' class='fnname'>restart</a>(self, _scope: &amp;mut <a class='struct' href='../../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../../rotor_tools/sync/trait.Replaceable.html' title='rotor_tools::sync::Replaceable'>Context</a>&gt;) -&gt; <a class='struct' href='../../rotor/struct.Response.html' title='rotor::Response'>Response</a>&lt;Self, Self::<a class='trait' href='../../rotor_tools/sync/trait.Replaceable.html' title='rotor_tools::sync::Replaceable'>Seed</a>&gt;</code></h3><div class='docblock'><p>Restart a state machine from <code>empty()</code> state</p>
+
+<p>This method is called before calling any other action methods when
+lock holding the state machine was poisoned.</p>
+
+<p>Note that after the <code>restart</code> current event is discarded, it&#39;s assumed
+that state machine is already arranged to receive some new events
+(i.e. it&#39;s useless to keep old <code>ready()</code> event if new connection is
+just being established)</p>
+
+<p>While you can check the state of the old machine (a <code>self</code>), and even
+return it as is, it&#39;s strongly discouraged, as you can&#39;t know exact
+kind of failure that happened in other thread (when lock was
+poisoned). But in case protocol is super-simple (like line-based
+without exceptions) and it&#39;s not security critical (i.e. monitoring
+using graphite), you may reuse old state machine or parts there of.</p>
+
+<p>Default implementation is just to panic</p>
+</div></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    </ul><script type="text/javascript" async
+                              src="../../implementors/rotor_tools/sync/trait.Replaceable.js">
+                      </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "rotor_tools";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["RangeArgument","Temporary type until the one in stdlib it made stable"]]});

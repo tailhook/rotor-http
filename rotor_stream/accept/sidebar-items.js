@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["Accepted","Trait which must be implemented for a state machine to accept connection"]]});

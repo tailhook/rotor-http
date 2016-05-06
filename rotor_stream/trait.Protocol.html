@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Protocol` trait in crate `rotor_stream`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Protocol">
+
+    <title>rotor_stream::Protocol - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>rotor_stream</a></p><script>window.sidebarCurrent = {name: 'Protocol', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content trait">
+<h1 class='fqn'><span class='in-band'>Trait <a href='index.html'>rotor_stream</a>::<wbr><a class='trait' href=''>Protocol</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-139' class='srclink' href='../src/rotor_stream/protocol.rs.html#106-169' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Protocol: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a> {
+    type Context;
+    type Socket: <a class='trait' href='../rotor_stream/trait.StreamSocket.html' title='rotor_stream::StreamSocket'>StreamSocket</a>;
+    type Seed;
+    fn <a href='#tymethod.create' class='fnname'>create</a>(seed: Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Seed</a>, sock: &amp;mut Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;;
+    fn <a href='#tymethod.bytes_read' class='fnname'>bytes_read</a>(self, transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, end: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;;
+    fn <a href='#tymethod.bytes_flushed' class='fnname'>bytes_flushed</a>(self, transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;;
+    fn <a href='#tymethod.timeout' class='fnname'>timeout</a>(self, transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;;
+    fn <a href='#tymethod.exception' class='fnname'>exception</a>(self, _transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, reason: <a class='enum' href='../rotor_stream/enum.Exception.html' title='rotor_stream::Exception'>Exception</a>, _scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;;
+    fn <a href='#tymethod.fatal' class='fnname'>fatal</a>(self, reason: <a class='enum' href='../rotor_stream/enum.Exception.html' title='rotor_stream::Exception'>Exception</a>, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;<a class='trait' href='https://doc.rust-lang.org/nightly/std/error/trait.Error.html' title='std::error::Error'>Error</a>&gt;&gt;;
+    fn <a href='#tymethod.wakeup' class='fnname'>wakeup</a>(self, transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;;
+}</pre>
+            <h2 id='associated-types'>Associated Types</h2>
+            <div class='methods'>
+        <h3 id='associatedtype.Context' class='method stab '><code>type Context</code></h3><h3 id='associatedtype.Socket' class='method stab '><code>type Socket: <a class='trait' href='../rotor_stream/trait.StreamSocket.html' title='rotor_stream::StreamSocket'>StreamSocket</a></code></h3><h3 id='associatedtype.Seed' class='method stab '><code>type Seed</code></h3></div>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.create' class='method stab '><code>fn <a href='#tymethod.create' class='fnname'>create</a>(seed: Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Seed</a>, sock: &amp;mut Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;</code></h3><div class='docblock'><p>Starting the protocol (e.g. accepted a socket)</p>
+</div><h3 id='tymethod.bytes_read' class='method stab '><code>fn <a href='#tymethod.bytes_read' class='fnname'>bytes_read</a>(self, transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, end: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;</code></h3><div class='docblock'><p>The action WaitBytes or WaitDelimiter is complete</p>
+
+<p>Note you don&#39;t have to consume input buffer. The data is in the
+transport, but you are free to ignore it. This may be useful for
+example to yield <code>Bytes(4)</code> to read the header size and then yield
+bigger value to read the whole header at once. But be careful, if
+you don&#39;t consume bytes you will repeatedly receive them again.</p>
+</div><h3 id='tymethod.bytes_flushed' class='method stab '><code>fn <a href='#tymethod.bytes_flushed' class='fnname'>bytes_flushed</a>(self, transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;</code></h3><div class='docblock'><p>The action Flush is complete</p>
+</div><h3 id='tymethod.timeout' class='method stab '><code>fn <a href='#tymethod.timeout' class='fnname'>timeout</a>(self, transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;</code></h3><div class='docblock'><p>Timeout happened, which means either deadline reached in
+Bytes, Delimiter, Flush. Or Sleep has passed.</p>
+</div><h3 id='tymethod.exception' class='method stab '><code>fn <a href='#tymethod.exception' class='fnname'>exception</a>(self, _transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, reason: <a class='enum' href='../rotor_stream/enum.Exception.html' title='rotor_stream::Exception'>Exception</a>, _scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;</code></h3><div class='docblock'><p>The method is called when too much bytes are read but no delimiter
+is found within the number of bytes specified. Or end of stream reached</p>
+
+<p>The usual case is to just close the connection (because it&#39;s probably
+DoS attack is going on or the protocol mismatch), but sometimes you
+want to send error code, like 413 Entity Too Large for HTTP.</p>
+
+<p>Note it&#39;s your responsibility to wait for the buffer to be flushed.
+If you write to the buffer and then return Intent::done() immediately,
+your data will be silently discarded.</p>
+
+<p>The <code>WriteError</code> and <code>ConnectError</code> are never passed here but passed
+into <code>fatal</code> handler instead.</p>
+</div><h3 id='tymethod.fatal' class='method stab '><code>fn <a href='#tymethod.fatal' class='fnname'>fatal</a>(self, reason: <a class='enum' href='../rotor_stream/enum.Exception.html' title='rotor_stream::Exception'>Exception</a>, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;<a class='trait' href='https://doc.rust-lang.org/nightly/std/error/trait.Error.html' title='std::error::Error'>Error</a>&gt;&gt;</code></h3><div class='docblock'><p>This method is called on fatal errors of the connection</p>
+
+<p>Connection can&#39;t proceed after this method is called</p>
+
+<p>Note: we use shared <code>Exception</code> type for both exception and fatal
+exceptions. This method receives <code>WriteError</code> and <code>ConnectError</code>
+options only.</p>
+</div><h3 id='tymethod.wakeup' class='method stab '><code>fn <a href='#tymethod.wakeup' class='fnname'>wakeup</a>(self, transport: &amp;mut <a class='struct' href='../rotor_stream/struct.Transport.html' title='rotor_stream::Transport'>Transport</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Socket</a>&gt;, scope: &amp;mut <a class='struct' href='../rotor/scope/struct.Scope.html' title='rotor::scope::Scope'>Scope</a>&lt;Self::<a class='trait' href='../rotor_stream/trait.Protocol.html' title='rotor_stream::Protocol'>Context</a>&gt;) -&gt; <a class='struct' href='../rotor_stream/struct.Intent.html' title='rotor_stream::Intent'>Intent</a>&lt;Self&gt;</code></h3><div class='docblock'><p>Message received (from the main loop)</p>
+</div></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    </ul><script type="text/javascript" async
+                              src="../implementors/rotor_stream/trait.Protocol.js">
+                      </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "rotor_stream";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

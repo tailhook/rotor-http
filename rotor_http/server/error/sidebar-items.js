@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["RequestError","Error type which is passed to bad_request and emit_error_page"]],"trait":[["HttpError","A trait which represents an error which can be formatted as HTTP error page"]]});
