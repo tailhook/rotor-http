@@ -19,7 +19,7 @@ impl<'a> Request<'a> {
         MessageState::RequestStart.with(out_buf)
     }
 
-    /// Write request line
+    /// Write request line.
     ///
     /// This puts request line into a buffer immediately. If you don't
     /// continue with request it will be sent to the network shortly.
@@ -32,7 +32,7 @@ impl<'a> Request<'a> {
         self.1 = Some(method == "HEAD");
         self.0.request_line(method, path, version);
     }
-    /// Add header to message
+    /// Add a header to the message.
     ///
     /// Header is written into the output buffer immediately. And is sent
     /// as soon as the next loop iteration
@@ -91,42 +91,40 @@ impl<'a> Request<'a> {
     pub fn is_started(&self) -> bool {
         self.0.is_started()
     }
-    /// Checks the validity of headers. And returns `true` if entity
-    /// body is expected.
+    /// Closes the HTTP header and returns `true` if entity body is expected.
     ///
-    /// Specifically `false` is returned when status is 101, 204, 304 or the
-    /// request is HEAD. Which means in both cases where response body is
-    /// either ignored (304, HEAD) or is denied by specification. But not
-    /// when response is zero-length.
+    /// Specifically `false` is returned when status is 1xx, 204, 304 or in
+    /// the response to a `HEAD` request but not if the body has zero-length.
     ///
     /// Similarly to `add_header()` it's fine to `unwrap()` here, unless you're
     /// doing some proxying.
     ///
     /// # Panics
     ///
-    /// Panics when response is in a wrong state
+    /// Panics when the response is in a wrong state.
     pub fn done_headers(&mut self) -> Result<bool, HeaderError> {
         self.0.done_headers()
     }
-    /// Write a chunk of the body
+    /// Write a chunk of the message body.
     ///
     /// Works both for fixed-size body and chunked body.
     ///
     /// For the chunked body each chunk is put into the buffer immediately
-    /// prefixed by chunk size.
+    /// prefixed by chunk size. Empty chunks are ignored.
     ///
     /// For both modes chunk is put into the buffer, but is only sent when
     /// rotor-stream state machine is reached. So you may put multiple chunks
     /// into the buffer quite efficiently.
     ///
-    /// For Ignored body you can `write_body` any number of times, it's just
-    /// ignored. But it's more efficient to check it with `needs_body()`
+    /// You may write a body in responses to HEAD requests just like in real
+    /// requests but the data is not sent to the network. Of course it is
+    /// more efficient to not construct the message body at all.
     ///
     /// # Panics
     ///
     /// When response is in wrong state. Or there is no headers which
     /// determine response body length (either Content-Length or
-    /// Transfer-Encoding)
+    /// Transfer-Encoding).
     pub fn write_body(&mut self, data: &[u8]) {
         self.0.write_body(data)
     }
@@ -135,15 +133,14 @@ impl<'a> Request<'a> {
     pub fn is_complete(&self) -> bool {
         self.0.is_complete()
     }
-    /// Writes needed final finalization data into the buffer and asserts
+    /// Writes needed finalization data into the buffer and asserts
     /// that response is in the appropriate state for that.
     ///
-    /// The method may be called multiple times
+    /// The method may be called multiple times.
     ///
     /// # Panics
     ///
-    /// When the response is in the wrong state or when Content-Length bytes
-    /// are not written yet
+    /// When the message is in the wrong state or the body is not finished.
     pub fn done(&mut self) {
         self.0.done()
     }

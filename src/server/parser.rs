@@ -698,7 +698,7 @@ mod test {
     #[test]
     fn parser_size() {
         // Just to keep track of size of structure
-        assert_eq!(::std::mem::size_of::<Parser<Proto, MemIo>>(), 88);
+        assert_eq!(::std::mem::size_of::<Parser<Proto, MemIo>>(), 80);
     }
 
 
