@@ -30,8 +30,9 @@ impl<'a> From<Message<'a>> for Response<'a> {
     }
 }
 
+// TODO: Support responses to CONNECT requests.
 impl<'a> Response<'a> {
-    /// Creates new response message by extracting needed fields from Head
+    /// Creates new response message by extracting needed fields from Head.
     pub fn new(out_buf: &mut Buf, version: Version,
         is_head: bool, do_close: bool) -> Response
     {
@@ -39,12 +40,12 @@ impl<'a> Response<'a> {
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
         MessageState::ResponseStart {
-            body: if is_head { Ignored } else { Normal },
+            body: if is_head { Head } else { Normal },
             version: version,
             close: do_close || version == Version::Http10,
         }.with(out_buf)
     }
-    /// Returns true if it's okay too proceed with keep-alive connection
+    /// Returns true if it's okay to proceed with keep-alive connection
     pub fn finish(self) -> bool {
         use message::MessageState::*;
         use message::Body::*;
@@ -56,7 +57,7 @@ impl<'a> Response<'a> {
             // If response is not even started yet, send something to make
             // debugging easier
             ResponseStart { body: Denied, .. }
-            | ResponseStart { body: Ignored, .. }
+            | ResponseStart { body: Head, .. }
             => {
                 buf.extend(NOT_IMPLEMENTED_HEAD.as_bytes());
             }
@@ -68,7 +69,7 @@ impl<'a> Response<'a> {
         return false;
     }
 
-    /// Write a 100 Continue response.
+    /// Write a 100 (Continue) response.
     ///
     /// A server should respond with the 100 status code if it receives a
     /// 100-continue expectation.
@@ -81,7 +82,7 @@ impl<'a> Response<'a> {
         self.0.response_continue()
     }
 
-    /// Write status line
+    /// Write status line.
     ///
     /// This puts status line into a buffer immediately. If you don't
     /// continue with request it will be sent to the network shortly.
@@ -91,11 +92,12 @@ impl<'a> Response<'a> {
     /// When status line is already written. It's expected that your request
     /// handler state machine will never call the method twice.
     ///
-    /// When status is 100x
+    /// When the status code is 100 (Continue). 100 is not allowed
+    /// as a final status code.
     pub fn status(&mut self, code: u16, reason: &str) {
         self.0.response_status(code, reason)
     }
-    /// Add header to message
+    /// Add a header to the message.
     ///
     /// Header is written into the output buffer immediately. And is sent
     /// as soon as the next loop iteration
@@ -154,42 +156,40 @@ impl<'a> Response<'a> {
     pub fn is_started(&self) -> bool {
         self.0.is_started()
     }
-    /// Checks the validity of headers. And returns `true` if entity
-    /// body is expected.
+    /// Closes the HTTP header and returns `true` if entity body is expected.
     ///
-    /// Specifically `false` is returned when status is 101, 204, 304 or the
-    /// request is HEAD. Which means in both cases where response body is
-    /// either ignored (304, HEAD) or is denied by specification. But not
-    /// when response is zero-length.
+    /// Specifically `false` is returned when status is 1xx, 204, 304 or in
+    /// the response to a `HEAD` request but not if the body has zero-length.
     ///
     /// Similarly to `add_header()` it's fine to `unwrap()` here, unless you're
     /// doing some proxying.
     ///
     /// # Panics
     ///
-    /// Panics when response is in a wrong state
+    /// Panics when the response is in a wrong state.
     pub fn done_headers(&mut self) -> Result<bool, HeaderError> {
         self.0.done_headers()
     }
-    /// Write a chunk of the body
+    /// Write a chunk of the message body.
     ///
     /// Works both for fixed-size body and chunked body.
     ///
     /// For the chunked body each chunk is put into the buffer immediately
-    /// prefixed by chunk size.
+    /// prefixed by chunk size. Empty chunks are ignored.
     ///
     /// For both modes chunk is put into the buffer, but is only sent when
     /// rotor-stream state machine is reached. So you may put multiple chunks
     /// into the buffer quite efficiently.
     ///
-    /// For Ignored body you can `write_body` any number of times, it's just
-    /// ignored. But it's more efficient to check it with `needs_body()`
+    /// You may write a body in responses to HEAD requests just like in real
+    /// requests but the data is not sent to the network. Of course it is
+    /// more efficient to not construct the message body at all.
     ///
     /// # Panics
     ///
     /// When response is in wrong state. Or there is no headers which
     /// determine response body length (either Content-Length or
-    /// Transfer-Encoding)
+    /// Transfer-Encoding).
     pub fn write_body(&mut self, data: &[u8]) {
         self.0.write_body(data)
     }
@@ -198,15 +198,14 @@ impl<'a> Response<'a> {
     pub fn is_complete(&self) -> bool {
         self.0.is_complete()
     }
-    /// Writes needed final finalization data into the buffer and asserts
+    /// Writes needed finalization data into the buffer and asserts
     /// that response is in the appropriate state for that.
     ///
-    /// The method may be called multiple times
+    /// The method may be called multiple times.
     ///
     /// # Panics
     ///
-    /// When the response is in the wrong state or when Content-Length bytes
-    /// are not written yet
+    /// When the response is in the wrong state.
     pub fn done(&mut self) {
         self.0.done()
     }
