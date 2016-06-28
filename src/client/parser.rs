@@ -561,15 +561,20 @@ impl<M, S> Protocol for Parser<M, S>
     {
         use self::ParserImpl::*;
         match self.1 {
+            // skip the event, will child state machine when connected
+            me@Connecting(..) => me.intent(self.0, scope),
+            // skip the event, will child state machine when connected
+            me@Flushing(..) => me.intent(self.0, scope),
             Idle(..) => {
                 // TODO(tailhook) propagate same idle deadline
                 maybe_new_request(transport,
                     self.0.wakeup(&Connection {
                         idle: true,
                     }, scope), scope)
-            },
-            // skip the event, will child state machine when idle
-            me@_ => me.intent(self.0, scope)
+            }
+            _ => {
+                unimplemented!();
+            }
         }
     }
 }
@@ -590,6 +595,7 @@ mod test {
         responses_received: usize,
         chunks_received: usize,
         bytes_received: usize,
+        wakeups: usize,
         errors: usize,
     }
 
@@ -691,10 +697,11 @@ mod test {
             unreachable!();
         }
         fn wakeup(self, _request: &mut Request,
-            _scope: &mut Scope<Self::Context>)
+            scope: &mut Scope<Self::Context>)
             -> Option<Self>
         {
-            unimplemented!();
+            scope.wakeups += 1;
+            Some(self)
         }
         fn bad_response(self, _error: &ResponseError,
             scope: &mut Scope<Self::Context>)
@@ -720,6 +727,7 @@ mod test {
             responses_received: 1,
             chunks_received: 0,
             bytes_received: 0,
+            wakeups: 0,
             errors: 0,
         });
     }
@@ -741,6 +749,7 @@ mod test {
             responses_received: 0,
             chunks_received: 0,
             bytes_received: 0,
+            wakeups: 0,
             errors: 0,
         });
         io.push_bytes("0\r\n\r\n".as_bytes());
@@ -753,6 +762,7 @@ mod test {
             responses_received: 1,
             chunks_received: 0,
             bytes_received: 0,
+            wakeups: 0,
             errors: 0,
         });
     }
@@ -774,6 +784,7 @@ mod test {
             responses_received: 0,
             chunks_received: 0,
             bytes_received: 0,
+            wakeups: 0,
             errors: 0,
         });
         io.push_bytes("5\r\nrotor\r\n0\r\n\r\n".as_bytes());
@@ -786,6 +797,7 @@ mod test {
             responses_received: 1,
             chunks_received: 0,
             bytes_received: 5,
+            wakeups: 0,
             errors: 0,
         });
     }
@@ -807,6 +819,7 @@ mod test {
             responses_received: 0,
             chunks_received: 0,
             bytes_received: 0,
+            wakeups: 0,
             errors: 0,
         });
         io.push_bytes("4\r\n\
@@ -827,6 +840,7 @@ mod test {
             responses_received: 1,
             chunks_received: 0,
             bytes_received: 23,
+            wakeups: 0,
             errors: 0,
         });
     }
@@ -842,6 +856,8 @@ mod test {
             io.clone(), 1, &mut lp.scope(1)).expect_machine();
         let m = m.ready(EventSet::readable(), &mut lp.scope(1))
             .expect_machine();
+        let m = m.wakeup(&mut lp.scope(1))
+            .expect_machine();
         assert_eq!(*lp.ctx(), Context {
             progressive: true,
             requests: 1,
@@ -849,6 +865,7 @@ mod test {
             responses_received: 0,
             chunks_received: 0,
             bytes_received: 0,
+            wakeups: 1,
             errors: 0,
         });
         io.push_bytes("4\r\n\
@@ -869,6 +886,7 @@ mod test {
             responses_received: 1,
             chunks_received: 1,
             bytes_received: 23,
+            wakeups: 1,
             errors: 0,
         });
     }
