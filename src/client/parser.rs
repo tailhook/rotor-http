@@ -561,20 +561,15 @@ impl<M, S> Protocol for Parser<M, S>
     {
         use self::ParserImpl::*;
         match self.1 {
-            // skip the event, will child state machine when connected
-            me@Connecting(..) => me.intent(self.0, scope),
-            // skip the event, will child state machine when connected
-            me@Flushing(..) => me.intent(self.0, scope),
             Idle(..) => {
                 // TODO(tailhook) propagate same idle deadline
                 maybe_new_request(transport,
                     self.0.wakeup(&Connection {
                         idle: true,
                     }, scope), scope)
-            }
-            _ => {
-                unimplemented!();
-            }
+            },
+            // skip the event, will child state machine when idle
+            me@_ => me.intent(self.0, scope)
         }
     }
 }
