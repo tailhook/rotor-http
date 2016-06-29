@@ -572,8 +572,10 @@ impl<M, S> Protocol for Parser<M, S>
                         idle: true,
                     }, scope), scope)
             },
-            ReadHeaders { machine, request, .. } => {
-                let mut req = request.with(transport.output());
+            ReadHeaders { machine, request, is_head } => {
+                let mut req: Request = request.with(transport.output());
+                req.1 = is_head;
+
                 match machine.wakeup(&mut req, scope) {
                     Some(m) => {
                         ReadHeaders {
