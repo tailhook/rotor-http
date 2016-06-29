@@ -658,7 +658,7 @@ mod test {
             _scope: &mut Scope<<Self::Requester as Requester>::Context>)
             -> Task<Cli>
         {
-            Task::Request(self, Req)
+            unimplemented!();
         }
         fn timeout(self,
             _connection: &Connection,
