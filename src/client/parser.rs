@@ -571,9 +571,33 @@ impl<M, S> Protocol for Parser<M, S>
                     self.0.wakeup(&Connection {
                         idle: true,
                     }, scope), scope)
-            }
-            _ => {
-                unimplemented!();
+            },
+            ReadHeaders { machine, request, .. } => {
+                let mut req = request.with(transport.output());
+                match machine.wakeup(&mut req, scope) {
+                    Some(m) => {
+                        ReadHeaders {
+                            machine: m,
+                            is_head: req.1,
+                            request: state(req),
+                        }.intent(self.0, scope)
+                    },
+                    _ => Intent::done()
+                }
+            },
+            Response { machine, request, progress, deadline } => {
+                let mut req = request.with(transport.output());
+                match machine.wakeup(&mut req, scope) {
+                    Some(m) => {
+                        Response {
+                            progress: progress,
+                            machine: m,
+                            deadline: deadline,
+                            request: state(req),
+                        }.intent(self.0, scope)
+                    },
+                    _ => Intent::done()
+                }
             }
         }
     }
@@ -634,7 +658,7 @@ mod test {
             _scope: &mut Scope<<Self::Requester as Requester>::Context>)
             -> Task<Cli>
         {
-            unimplemented!();
+            Task::Request(self, Req)
         }
         fn timeout(self,
             _connection: &Connection,
