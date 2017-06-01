@@ -11,7 +11,7 @@ extern crate rotor_stream;
 
 pub mod server;
 pub mod client;
-mod message;
+pub mod message;
 mod recvmode;
 mod headers;
 mod version;
