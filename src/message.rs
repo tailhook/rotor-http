@@ -1,3 +1,5 @@
+//! HTTP Messages and Errors
+//!
 use std::io::Write;
 use std::ascii::AsciiExt;
 
